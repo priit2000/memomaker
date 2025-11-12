@@ -18,7 +18,7 @@ import glob
 # ============================================================================
 
 # API Configuration
-API_KEY = os.environ.get("GOOGLE_API_KEY")
+API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # Model Settings
 MODEL_NAME = 'gemini-flash-latest'
@@ -211,6 +211,7 @@ class GeminiAudioApp(ctk.CTk):
         self.current_language = DEFAULT_LANGUAGE
         self.create_widgets()
         self.setup_drag_drop()
+        self.check_api_key()
 
     def create_widgets(self):
         # Main container
@@ -437,6 +438,16 @@ class GeminiAudioApp(ctk.CTk):
         self.progress_bar.pack(fill=tk.X, pady=(0, 5))
         self.progress_bar.set(0)
 
+        # API Key button
+        api_key_btn = ctk.CTkButton(control_inner,
+                                   text="🔑 API Key",
+                                   command=self.show_api_key_dialog,
+                                   width=90,
+                                   height=35,
+                                   font=ctk.CTkFont(size=12),
+                                   fg_color=["#6C5CE7", "#5A4FCF"])
+        api_key_btn.pack(side=tk.RIGHT, padx=(10, 0))
+        
         self.process_btn = ctk.CTkButton(control_inner,
                                          text="🚀 Process Audio",
                                          command=self.process_audio,
@@ -452,6 +463,186 @@ class GeminiAudioApp(ctk.CTk):
     def on_entry_click(self, event):
         """Handle click on file entry to open file dialog."""
         self.browse_file()
+    
+    def check_api_key(self):
+        """Check if API key exists, prompt user to enter if missing."""
+        if not API_KEY:
+            self.log_message("⚠️ Google API key not found!")
+            self.show_api_key_dialog()
+    
+    def show_api_key_dialog(self):
+        """Show dialog to enter and save API key."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("API Key Required")
+        dialog.geometry("500x300")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (500 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (300 // 2)
+        dialog.geometry(f"500x300+{x}+{y}")
+        
+        # Content frame
+        content_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Title
+        title_label = ctk.CTkLabel(content_frame,
+                                  text="🔑 Google API Key Required",
+                                  font=ctk.CTkFont(size=18, weight="bold"),
+                                  text_color=["#4A90E2", "#5BA3F5"])
+        title_label.pack(pady=(0, 10))
+        
+        # Instructions
+        instructions = ctk.CTkLabel(content_frame,
+                                   text="Get your API key from Google AI Studio:\nhttps://aistudio.google.com/app/apikey\n\nPaste your API key below:",
+                                   font=ctk.CTkFont(size=12),
+                                   justify="center")
+        instructions.pack(pady=(0, 15))
+        
+        # API key entry
+        self.api_key_entry = ctk.CTkEntry(content_frame,
+                                         placeholder_text="Enter your Google API key here...",
+                                         width=400,
+                                         height=40,
+                                         font=ctk.CTkFont(size=12))  # Show key in plain text
+        
+        # Show existing key if available
+        if API_KEY:
+            self.api_key_entry.insert(0, API_KEY)
+        
+        self.api_key_entry.pack(pady=(0, 20))
+        
+        # Buttons
+        button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        button_frame.pack(fill=tk.X)
+        
+        save_btn = ctk.CTkButton(button_frame,
+                                text="💾 Save API Key",
+                                command=lambda: self.save_api_key(dialog),
+                                width=150,
+                                height=35,
+                                font=ctk.CTkFont(size=12, weight="bold"))
+        save_btn.pack(side=tk.LEFT, padx=(50, 10))
+        
+        cancel_btn = ctk.CTkButton(button_frame,
+                                  text="❌ Cancel",
+                                  command=dialog.destroy,
+                                  width=100,
+                                  height=35,
+                                  font=ctk.CTkFont(size=12),
+                                  fg_color=["#FF6B6B", "#FF5252"])
+        cancel_btn.pack(side=tk.LEFT)
+        
+        # Open browser button
+        browser_btn = ctk.CTkButton(button_frame,
+                                   text="🌐 Open AI Studio",
+                                   command=lambda: webbrowser.open("https://aistudio.google.com/app/apikey"),
+                                   width=130,
+                                   height=35,
+                                   font=ctk.CTkFont(size=12),
+                                   fg_color=["#4CAF50", "#66BB6A"])
+        browser_btn.pack(side=tk.RIGHT, padx=(10, 50))
+        
+        # Focus on entry
+        self.api_key_entry.focus()
+    
+    def save_api_key(self, dialog):
+        """Save the API key to environment and user profile."""
+        api_key = self.api_key_entry.get().strip()
+        
+        if not api_key:
+            self.show_error_message("Please enter a valid API key")
+            return
+            
+        if len(api_key) < 30:  # Basic validation
+            self.show_error_message("API key seems too short. Please check and try again.")
+            return
+        
+        try:
+            # Set for current session
+            os.environ['GEMINI_API_KEY'] = api_key
+            
+            # Save to user profile for persistence
+            self.save_api_key_to_profile(api_key)
+            
+            # Update global variable
+            global API_KEY
+            API_KEY = api_key
+            
+            self.log_message("✅ API key saved successfully!")
+            self.log_message("🔄 Please restart the application for changes to take effect.")
+            dialog.destroy()
+            
+        except Exception as e:
+            self.show_error_message(f"Error saving API key: {str(e)}")
+    
+    def save_api_key_to_profile(self, api_key):
+        """Save API key to user environment permanently."""
+        import platform
+        import subprocess
+        
+        system = platform.system()
+        
+        if system == "Windows":
+            # Add to user environment variables
+            try:
+                subprocess.run([
+                    'setx', 'GEMINI_API_KEY', api_key
+                ], check=True, capture_output=True)
+                self.log_message("💾 API key saved to Windows user environment")
+            except subprocess.CalledProcessError:
+                self.log_message("⚠️ Could not save to Windows environment. Set manually.")
+        
+        elif system in ["Linux", "Darwin"]:
+            # Add to shell profile
+            home_dir = os.path.expanduser("~")
+            shell_profiles = ['.bashrc', '.zshrc', '.bash_profile', '.profile']
+            
+            for profile in shell_profiles:
+                profile_path = os.path.join(home_dir, profile)
+                if os.path.exists(profile_path):
+                    try:
+                        with open(profile_path, 'a') as f:
+                            f.write(f"\n# Gemini API Key for MemoMaker\nexport GEMINI_API_KEY='{api_key}'\n")
+                        self.log_message(f"💾 API key saved to {profile}")
+                        break
+                    except Exception:
+                        continue
+            else:
+                self.log_message("⚠️ Could not save to shell profile. Set manually.")
+    
+    def show_error_message(self, message):
+        """Show error message in a popup."""
+        error_dialog = ctk.CTkToplevel(self)
+        error_dialog.title("Error")
+        error_dialog.geometry("350x150")
+        error_dialog.transient(self)
+        error_dialog.grab_set()
+        
+        # Center the dialog
+        error_dialog.update_idletasks()
+        x = (error_dialog.winfo_screenwidth() // 2) - (350 // 2)
+        y = (error_dialog.winfo_screenheight() // 2) - (150 // 2)
+        error_dialog.geometry(f"350x150+{x}+{y}")
+        
+        content = ctk.CTkFrame(error_dialog, fg_color="transparent")
+        content.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        error_label = ctk.CTkLabel(content,
+                                  text=f"❌ {message}",
+                                  font=ctk.CTkFont(size=12),
+                                  wraplength=300)
+        error_label.pack(expand=True)
+        
+        ok_btn = ctk.CTkButton(content,
+                              text="OK",
+                              command=error_dialog.destroy,
+                              width=80,
+                              height=30)
+        ok_btn.pack(pady=(10, 0))
     
     def on_language_change(self, selected_language):
         """Handle language selection change."""
