@@ -22,13 +22,16 @@ API_KEY = os.environ.get("GOOGLE_API_KEY")
 # Model Settings
 MODEL_NAME = 'gemini-flash-latest'
 
+# Prompt Settings
+PROMPT_FILE = "transcription-prompt.md"
+
 # File Processing Settings
 INLINE_THRESHOLD = 20 * 1024 * 1024  # 20 MB in bytes
 
-# Function to read prompts from transcription-prompt.md
+# Function to read prompts from prompt file
 def read_prompts_from_file():
     try:
-        with open("transcription-prompt.md", "r", encoding="utf-8") as f:
+        with open(PROMPT_FILE, "r", encoding="utf-8") as f:
             content = f.read()
         
         # Split by # Memo section
