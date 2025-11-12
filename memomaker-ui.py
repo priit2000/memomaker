@@ -11,6 +11,7 @@ import webbrowser
 import time
 import mimetypes
 import pathlib
+import glob
 
 # ============================================================================
 # USER SETTINGS & CONFIGURATION
@@ -36,10 +37,31 @@ VALID_MIME_TYPES = {
 }
 
 
-# File paths (cross-platform compatible)
-PROMPT_FILE = os.path.join(os.getcwd(), "transcription-prompt.md")
+# File paths (cross-platform compatible) 
 TRANSCRIPT_FILENAME = os.path.join(os.getcwd(), "transcript.txt")
 MEMO_FILENAME = os.path.join(os.getcwd(), "memo.md")
+
+# Language detection and prompt file handling
+def detect_available_languages():
+    """Detect available prompt files and return language options."""
+    languages = {}
+    prompt_pattern = "transcription-prompt-*.md"
+    
+    prompt_files = glob.glob(os.path.join(os.getcwd(), prompt_pattern))
+    
+    for file_path in prompt_files:
+        filename = os.path.basename(file_path)
+        # Extract language code from filename like 'transcription-prompt-et.md' -> 'et'
+        if filename.startswith('transcription-prompt-') and filename.endswith('.md'):
+            lang_code = filename[len('transcription-prompt-'):-3]
+            if lang_code:
+                languages[lang_code.upper()] = file_path
+    
+    return languages
+
+# Detect available languages
+AVAILABLE_LANGUAGES = detect_available_languages()
+DEFAULT_LANGUAGE = list(AVAILABLE_LANGUAGES.keys())[0] if AVAILABLE_LANGUAGES else None
 
 # File validation functions
 def validate_audio_file(file_path):
@@ -112,15 +134,28 @@ def format_api_usage(operation, file_size, processing_time, success=True, error=
     
     return "\n".join(usage_info)
 
-# Function to read prompts from prompt file
-def read_prompts_from_file():
+def read_prompts_from_file(language_code=None):
+    """Read prompts from language-specific prompt file."""
+    if language_code is None:
+        language_code = DEFAULT_LANGUAGE
+    
+    if not language_code or language_code not in AVAILABLE_LANGUAGES:
+        return None, None
+        
+    prompt_file = AVAILABLE_LANGUAGES[language_code]
+    
     try:
-        with open(PROMPT_FILE, "r", encoding="utf-8") as f:
+        with open(prompt_file, "r", encoding="utf-8") as f:
             content = f.read()
         # Split by # Memo section
         parts = content.split("# Memo")
         if len(parts) >= 2:
-            transcript_section = parts[0].replace("# Transkriptsioon", "").strip()
+            # Remove first heading (could be "# Transkriptsioon" or "# Transcription")
+            first_line_end = parts[0].find('\n')
+            if first_line_end != -1:
+                transcript_section = parts[0][first_line_end+1:].strip()
+            else:
+                transcript_section = parts[0].strip()
             memo_section = parts[1].strip()
             return transcript_section, memo_section
         else:
@@ -128,11 +163,14 @@ def read_prompts_from_file():
     except FileNotFoundError:
         return None, None
 
-# Read prompts from file
-_transcript_prompt, _memo_prompt = read_prompts_from_file()
-
-DEFAULT_TRANS_PROMPT = _transcript_prompt
-DEFAULT_MEMO_PROMPT = _memo_prompt
+# Initialize default prompts
+if AVAILABLE_LANGUAGES:
+    _transcript_prompt, _memo_prompt = read_prompts_from_file(DEFAULT_LANGUAGE)
+    DEFAULT_TRANS_PROMPT = _transcript_prompt if _transcript_prompt else "❌ ERROR: Could not load transcript prompt from file!"
+    DEFAULT_MEMO_PROMPT = _memo_prompt if _memo_prompt else "❌ ERROR: Could not load memo prompt from file!"
+else:
+    DEFAULT_TRANS_PROMPT = "❌ ERROR: No prompt files found!\n\nPlease create prompt files like 'transcription-prompt-en.md' or 'transcription-prompt-et.md'"
+    DEFAULT_MEMO_PROMPT = "❌ ERROR: No prompt files found!\n\nPlease create prompt files like 'transcription-prompt-en.md' or 'transcription-prompt-et.md'"
 
 
 # UI Settings
@@ -170,6 +208,7 @@ class GeminiAudioApp(ctk.CTk):
         self.transcript = None
         self.processing = False
         self.api_start_time = None
+        self.current_language = DEFAULT_LANGUAGE
         self.create_widgets()
         self.setup_drag_drop()
 
@@ -267,13 +306,67 @@ class GeminiAudioApp(ctk.CTk):
                                        radiobutton_height=20)
             radio.pack(side=tk.LEFT, padx=(0, 30), pady=5)
 
-        # Prompts
-        self.prompts_tabview = ctk.CTkTabview(main_container,
-                                              height=200,
-                                              corner_radius=20,
+        # Prompts section
+        prompts_container = ctk.CTkFrame(main_container,
+                                        fg_color=["#1A1A2E", "#252540"],
+                                        corner_radius=20,
+                                        border_width=1,
+                                        border_color=["#333355", "#444466"])
+        prompts_container.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        
+        # Prompts header with language selection
+        prompts_header_frame = ctk.CTkFrame(prompts_container, fg_color="transparent")
+        prompts_header_frame.pack(fill=tk.X, padx=20, pady=(15, 10))
+        
+        prompts_header = ctk.CTkLabel(prompts_header_frame,
+                                     text="📝 Prompts",
+                                     font=ctk.CTkFont(size=18, weight="bold"),
+                                     text_color=["#E0E0E0", "#F0F0F0"])
+        prompts_header.pack(side=tk.LEFT)
+        
+        # Language selection (only show if multiple languages available)
+        if len(AVAILABLE_LANGUAGES) > 1:
+            lang_frame = ctk.CTkFrame(prompts_header_frame, fg_color="transparent")
+            lang_frame.pack(side=tk.RIGHT)
+            
+            lang_label = ctk.CTkLabel(lang_frame,
+                                     text="Language:",
+                                     font=ctk.CTkFont(size=12),
+                                     text_color=["#AAAAAA", "#CCCCCC"])
+            lang_label.pack(side=tk.LEFT, padx=(0, 8))
+            
+            self.language_var = tk.StringVar(value=self.current_language or "")
+            self.language_combo = ctk.CTkOptionMenu(lang_frame,
+                                                   variable=self.language_var,
+                                                   values=list(AVAILABLE_LANGUAGES.keys()),
+                                                   command=self.on_language_change,
+                                                   width=80,
+                                                   height=28,
+                                                   font=ctk.CTkFont(size=12))
+            self.language_combo.pack(side=tk.RIGHT)
+        elif len(AVAILABLE_LANGUAGES) == 1:
+            # Show current language as label
+            current_lang = list(AVAILABLE_LANGUAGES.keys())[0]
+            lang_label = ctk.CTkLabel(prompts_header_frame,
+                                     text=f"Language: {current_lang}",
+                                     font=ctk.CTkFont(size=12),
+                                     text_color=["#AAAAAA", "#CCCCCC"])
+            lang_label.pack(side=tk.RIGHT)
+        else:
+            # Show error indicator
+            error_label = ctk.CTkLabel(prompts_header_frame,
+                                      text="⚠️ No prompt files",
+                                      font=ctk.CTkFont(size=12),
+                                      text_color=["#FF6B6B", "#FF5252"])
+            error_label.pack(side=tk.RIGHT)
+        
+        # Prompts tabview
+        self.prompts_tabview = ctk.CTkTabview(prompts_container,
+                                              height=180,
+                                              corner_radius=15,
                                               border_width=1,
                                               border_color=["#4A90E2", "#5BA3F5"])
-        self.prompts_tabview.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        self.prompts_tabview.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 15))
 
         transcript_tab = self.prompts_tabview.add("📝 Transcript Prompt")
         self.transcript_text = ctk.CTkTextbox(transcript_tab,
@@ -359,6 +452,35 @@ class GeminiAudioApp(ctk.CTk):
     def on_entry_click(self, event):
         """Handle click on file entry to open file dialog."""
         self.browse_file()
+    
+    def on_language_change(self, selected_language):
+        """Handle language selection change."""
+        if selected_language in AVAILABLE_LANGUAGES:
+            self.current_language = selected_language
+            self.load_prompts_for_language(selected_language)
+            self.log_message(f"🌍 Language changed to: {selected_language}")
+    
+    def load_prompts_for_language(self, language_code):
+        """Load prompts for the selected language."""
+        transcript_prompt, memo_prompt = read_prompts_from_file(language_code)
+        
+        if transcript_prompt and memo_prompt:
+            # Clear and update transcript prompt
+            self.transcript_text.delete("1.0", tk.END)
+            self.transcript_text.insert("1.0", transcript_prompt)
+            
+            # Clear and update memo prompt 
+            self.memo_text.delete("1.0", tk.END)
+            self.memo_text.insert("1.0", memo_prompt)
+            
+            self.log_message(f"✅ Prompts loaded for language: {language_code}")
+        else:
+            error_msg = f"❌ ERROR: Could not load prompts for language: {language_code}"
+            self.transcript_text.delete("1.0", tk.END)
+            self.transcript_text.insert("1.0", error_msg)
+            self.memo_text.delete("1.0", tk.END)
+            self.memo_text.insert("1.0", error_msg)
+            self.log_message(error_msg)
     
     def set_audio_file(self, file_path):
         """Set and validate audio file path."""

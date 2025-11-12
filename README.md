@@ -9,12 +9,15 @@ Transform audio recordings into professional transcripts and actionable memos us
 ## ✨ Features
 
 - 🎯 **Smart Audio Processing** - Automatic detection of optimal processing method
-- 🎨 **Modern UI** - Beautiful dark-themed interface with animations
-- 🌍 **Estonian Language** - Native support for Estonian transcription and memos
+- 🎨 **Modern UI** - Clean dark-themed interface with real-time progress tracking
+- 🌍 **Multi-Language Support** - Estonian and English prompts with easy language switching
 - ⚡ **Multiple Processing Methods** - Inline, cloud upload, or auto-detection
 - 📝 **Configurable Prompts** - Customize transcription and memo generation
 - 🔊 **Wide Audio Support** - MP3, WAV, M4A, OGG, FLAC, AAC formats
-- 📋 **Structured Output** - Professional memo format with timestamps and action items
+- 📋 **Markdown Output** - Professional memo format with timestamps and action items
+- 🛡️ **File Validation** - Comprehensive format, size, and integrity checking
+- 📊 **API Usage Tracking** - Real-time token counts and processing statistics
+- 🔄 **Real Progress Bar** - Step-by-step progress indication during processing
 
 ## 🚀 Quick Start
 
@@ -55,14 +58,16 @@ Transform audio recordings into professional transcripts and actionable memos us
 ### GUI Mode (Recommended)
 
 1. **Launch the app** - Run `python memomaker-ui.py`
-2. **Select audio file** - Click "Browse" and choose your audio file
-3. **Choose processing method**:
+2. **Select audio file** - Click "Browse" and choose your audio file (or click the file path field)
+3. **Choose language** - Select Estonian (ET) or English (EN) from the language dropdown
+4. **Choose processing method**:
    - 🎯 **Auto** - Smart detection based on file size
    - ⚡ **Inline** - Fast processing for smaller files (<20MB)
    - ☁️ **Cloud Upload** - Better for larger files (>20MB)
-4. **Customize prompts** (optional) - Edit transcription and memo prompts
-5. **Process** - Click "Process Audio" and wait for results
-6. **View results** - Transcript saves to `transcript.txt`, memo opens in browser
+5. **Customize prompts** (optional) - Edit transcription and memo prompts in the tabs
+6. **Process** - Click "Process Audio" and watch real-time progress
+7. **View results** - Transcript saves to `transcript.txt`, memo saves to `memo.md` and opens automatically
+8. **Monitor usage** - View detailed API usage statistics including token counts in the results area
 
 ### CLI Mode
 
@@ -81,37 +86,48 @@ API_KEY = os.environ.get("GOOGLE_API_KEY")
 # Model Settings
 MODEL_NAME = 'gemini-flash-latest'
 
-# Prompt Settings
-PROMPT_FILE = "transcription-prompt.md"
-
 # File Processing Settings
 INLINE_THRESHOLD = 20 * 1024 * 1024  # 20 MB
+MAX_FILE_SIZE = 100 * 1024 * 1024     # 100 MB max
+MIN_FILE_SIZE = 1024                   # 1 KB min
 
 # Output File Settings
 TRANSCRIPT_FILENAME = "transcript.txt"
-MEMO_FILENAME = "memo.html"
+MEMO_FILENAME = "memo.md"
 
 # UI Settings
 WINDOW_WIDTH = 1000
 WINDOW_HEIGHT = 800
 ```
 
-### Custom Prompts
+### Multi-Language Prompts
 
-Edit `transcription-prompt.md` to customize:
-- **Transcription rules** - Under `# Transkriptsioon` section
+The app automatically detects and uses language-specific prompt files:
+
+- **Estonian**: `transcription-prompt-et.md`
+- **English**: `transcription-prompt-en.md` 
+- **Future**: `transcription-prompt-fr.md`, `transcription-prompt-de.md`, etc.
+
+Each file contains:
+- **Transcription rules** - Under `# Transkriptsioon`/`# Transcription` section
 - **Memo format** - Under `# Memo` section
+
+**Language Selection**:
+- Dropdown menu appears when multiple language files are present
+- Single language shows as label
+- Missing files show clear error messages in prompt areas
 
 ## 📁 File Structure
 
 ```
 memomaker/
-├── memomaker-ui.py          # Main application
-├── transcription-prompt.md  # Estonian prompts configuration
-├── .gitignore              # Git ignore rules
-├── README.md               # This file
-├── transcript.txt          # Generated transcript (after processing)
-└── memo.html              # Generated memo (after processing)
+├── memomaker-ui.py              # Main application
+├── transcription-prompt-et.md   # Estonian prompts
+├── transcription-prompt-en.md   # English prompts
+├── .gitignore                  # Git ignore rules
+├── README.md                   # This file
+├── transcript.txt              # Generated transcript (after processing)
+└── memo.md                     # Generated memo (after processing)
 ```
 
 ## 🎨 Processing Methods
@@ -131,11 +147,12 @@ memomaker/
 [00h:02m:45s] Priit Kallas: Kindlasti. Numbrid on väga head...
 ```
 
-### Memo Format
+### Memo Format (Markdown)
 - **Structured sections**: Participants, summary, decisions, actions
 - **Timestamps**: References to specific moments in audio
 - **Action items**: Clear responsibilities and deadlines
-- **Estonian language**: Professional business Estonian
+- **Multi-language**: Professional business language (Estonian or English)
+- **Markdown format**: Easy to edit and convert to other formats
 
 ## 🔧 Troubleshooting
 
@@ -150,13 +167,16 @@ pip install customtkinter
 - Verify your Google API key is correct
 - Check environment variable is set: `echo $GOOGLE_API_KEY`
 
-**"File too large" errors**
+**"File validation failed" errors**
+- Check file format (supported: MP3, WAV, M4A, OGG, FLAC, AAC)
+- Ensure file size is between 1KB and 100MB
 - Use "Upload" method for files > 20MB
-- Consider compressing audio file
+- Consider compressing large audio files
 
 **UI not appearing**
 - Ensure you're running GUI mode: `python memomaker-ui.py`
 - Check if running with command line arguments (switches to CLI mode)
+- Verify prompt files exist: `transcription-prompt-et.md` or `transcription-prompt-en.md`
 
 ### Performance Tips
 
@@ -187,7 +207,8 @@ pip install customtkinter
 - [ ] **Export formats** - PDF, Word, plain text
 - [ ] **Audio player** - Built-in playback with waveform
 - [ ] **Cloud storage** - Direct integration with Google Drive/OneDrive
-- [ ] **Multi-language** - Support for other languages
+- [x] **Multi-language** - Estonian and English support (completed)
+- [ ] **Additional languages** - French, German, etc.
 - [ ] **Templates** - Custom memo templates
 
 ## ⚠️ Security & Privacy
@@ -200,6 +221,25 @@ pip install customtkinter
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
+
+## 📊 New Features
+
+### API Usage Tracking
+- **Real-time statistics** displayed in results area
+- **Token counts**: Input, output, and total tokens
+- **Processing time**: Detailed timing for each operation
+- **No log files**: All data shown directly in UI
+
+### File Validation
+- **Format checking**: Validates audio file extensions and MIME types
+- **Size limits**: Enforces minimum (1KB) and maximum (100MB) file sizes
+- **Integrity checks**: Basic corruption detection
+- **Clear error messages**: Specific validation failure details
+
+### Real Progress Bar
+- **Step-by-step progress**: Shows actual processing stages
+- **Visual feedback**: Progress from 0.1 (start) to 1.0 (complete)
+- **Stays visible**: Progress remains visible for 2 seconds after completion
 
 ## 🤝 Support
 

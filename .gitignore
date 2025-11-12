@@ -92,7 +92,7 @@ memo.html
 memo.md
 
 # Keep important script files
-!transcription-prompt.md
+!transcription-prompt*.md
 !README.md
 
 # AI tools
