@@ -4,13 +4,13 @@ import os
 import argparse
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog, scrolledtext
+from tkinter import filedialog
 import customtkinter as ctk
-from PIL import Image, ImageTk
 import google.generativeai as genai
 import webbrowser
-import math
 import time
+import mimetypes
+import pathlib
 
 # ============================================================================
 # USER SETTINGS & CONFIGURATION
@@ -22,11 +22,95 @@ API_KEY = os.environ.get("GOOGLE_API_KEY")
 # Model Settings
 MODEL_NAME = 'gemini-flash-latest'
 
-# Prompt Settings
-PROMPT_FILE = "transcription-prompt.md"
 
 # File Processing Settings
 INLINE_THRESHOLD = 20 * 1024 * 1024  # 20 MB in bytes
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB max file size
+MIN_FILE_SIZE = 1024  # 1 KB minimum file size
+
+# File Validation Settings
+VALID_AUDIO_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac'}
+VALID_MIME_TYPES = {
+    'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/m4a',
+    'audio/ogg', 'audio/flac', 'audio/aac', 'audio/x-m4a'
+}
+
+
+# File paths (cross-platform compatible)
+PROMPT_FILE = os.path.join(os.getcwd(), "transcription-prompt.md")
+TRANSCRIPT_FILENAME = os.path.join(os.getcwd(), "transcript.txt")
+MEMO_FILENAME = os.path.join(os.getcwd(), "memo.md")
+
+# File validation functions
+def validate_audio_file(file_path):
+    """Validate audio file format, size, and basic integrity."""
+    if not file_path or not os.path.exists(file_path):
+        return False, "File does not exist"
+    
+    # Check file extension
+    file_ext = pathlib.Path(file_path).suffix.lower()
+    if file_ext not in VALID_AUDIO_EXTENSIONS:
+        return False, f"Unsupported file format: {file_ext}. Supported: {', '.join(VALID_AUDIO_EXTENSIONS)}"
+    
+    # Check file size
+    try:
+        file_size = os.path.getsize(file_path)
+        if file_size < MIN_FILE_SIZE:
+            return False, f"File too small ({file_size} bytes). Minimum: {MIN_FILE_SIZE} bytes"
+        if file_size > MAX_FILE_SIZE:
+            return False, f"File too large ({file_size:,} bytes). Maximum: {MAX_FILE_SIZE:,} bytes"
+    except OSError as e:
+        return False, f"Cannot read file size: {str(e)}"
+    
+    # Check MIME type
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if mime_type and mime_type not in VALID_MIME_TYPES:
+        return False, f"Invalid MIME type: {mime_type}"
+    
+    # Basic file integrity check
+    try:
+        with open(file_path, 'rb') as f:
+            # Read first few bytes to ensure file is readable
+            f.read(1024)
+    except (OSError, IOError) as e:
+        return False, f"File appears corrupted or unreadable: {str(e)}"
+    
+    return True, "File validation passed"
+
+def validate_prompt_input(prompt_text):
+    """Validate prompt input text."""
+    if not prompt_text or not prompt_text.strip():
+        return False, "Prompt cannot be empty"
+    
+    # Check for reasonable length limits
+    if len(prompt_text.strip()) < 10:
+        return False, "Prompt too short (minimum 10 characters)"
+    
+    if len(prompt_text) > 5000:
+        return False, "Prompt too long (maximum 5000 characters)"
+    
+    return True, "Prompt validation passed"
+
+def format_api_usage(operation, file_size, processing_time, success=True, error=None, response_data=None):
+    """Format API usage information for display."""
+    usage_info = []
+    usage_info.append(f"📊 API Usage Summary:")
+    usage_info.append(f"   Operation: {operation}")
+    usage_info.append(f"   File Size: {file_size:,} bytes ({file_size/(1024*1024):.2f} MB)")
+    usage_info.append(f"   Processing Time: {processing_time:.2f} seconds")
+    
+    if response_data:
+        if hasattr(response_data, 'usage_metadata'):
+            metadata = response_data.usage_metadata
+            usage_info.append(f"   Input Tokens: {getattr(metadata, 'prompt_token_count', 'N/A')}")
+            usage_info.append(f"   Output Tokens: {getattr(metadata, 'candidates_token_count', 'N/A')}")
+            usage_info.append(f"   Total Tokens: {getattr(metadata, 'total_token_count', 'N/A')}")
+    
+    usage_info.append(f"   Success: {'✅ Yes' if success else '❌ No'}")
+    if error:
+        usage_info.append(f"   Error: {error}")
+    
+    return "\n".join(usage_info)
 
 # Function to read prompts from prompt file
 def read_prompts_from_file():
@@ -50,9 +134,6 @@ _transcript_prompt, _memo_prompt = read_prompts_from_file()
 DEFAULT_TRANS_PROMPT = _transcript_prompt
 DEFAULT_MEMO_PROMPT = _memo_prompt
 
-# Output File Settings
-TRANSCRIPT_FILENAME = "transcript.txt"
-MEMO_FILENAME = "memo.html"
 
 # UI Settings
 APP_TITLE = "✨ Gemini Audio Processor Pro"
@@ -69,14 +150,10 @@ SUPPORTED_AUDIO_TYPES = [
     ("All Files", "*.*")
 ]
 
+
 # ============================================================================
 # END USER SETTINGS
 # ============================================================================
-
-
-
-
-
 
 class GeminiAudioApp(ctk.CTk):
     def __init__(self):
@@ -92,7 +169,9 @@ class GeminiAudioApp(ctk.CTk):
         self.audio_file_path = None
         self.transcript = None
         self.processing = False
+        self.api_start_time = None
         self.create_widgets()
+        self.setup_drag_drop()
 
     def create_widgets(self):
         # Main container
@@ -142,7 +221,7 @@ class GeminiAudioApp(ctk.CTk):
         self.file_entry = ctk.CTkEntry(file_input_frame,
                                        height=45,
                                        font=ctk.CTkFont(size=14),
-                                       placeholder_text="Select an audio file to process...",
+                                       placeholder_text="Click Browse to select an audio file...",
                                        corner_radius=15,
                                        border_width=2,
                                        border_color=["#4A90E2", "#5BA3F5"])
@@ -273,29 +352,50 @@ class GeminiAudioApp(ctk.CTk):
                                          font=ctk.CTkFont(size=16, weight="bold"),
                                          corner_radius=25)
         self.process_btn.pack(side=tk.RIGHT, padx=(20, 0))
-
-
+    def setup_drag_drop(self):
+        """Setup file entry click handler."""
+        self.file_entry.bind("<Button-1>", self.on_entry_click)
+        
+    def on_entry_click(self, event):
+        """Handle click on file entry to open file dialog."""
+        self.browse_file()
+    
+    def set_audio_file(self, file_path):
+        """Set and validate audio file path."""
+        # Validate the file
+        is_valid, message = validate_audio_file(file_path)
+        
+        if not is_valid:
+            self.log_message(f"❌ File validation failed: {message}")
+            self.update_status("❌ Invalid file", ["#FF5252", "#FF6B6B"])
+            return False
+        
+        # File is valid
+        self.audio_file_path = os.path.abspath(file_path)  # Use absolute path
+        self.file_entry.delete(0, tk.END)
+        self.file_entry.insert(0, self.audio_file_path)
+        
+        file_size = os.path.getsize(file_path)
+        size_mb = file_size / (1024 * 1024)
+        self.log_message(f"✅ Selected: {os.path.basename(file_path)} ({size_mb:.2f} MB)")
+        self.log_message(f"📍 Validation: {message}")
+        
+        return True
+    
     def browse_file(self):
         file_path = filedialog.askopenfilename(
             title="Select Audio File",
-            filetypes=SUPPORTED_AUDIO_TYPES
+            filetypes=SUPPORTED_AUDIO_TYPES,
+            initialdir=os.getcwd()
         )
         if file_path:
-            self.audio_file_path = file_path
-            self.file_entry.delete(0, tk.END)
-            self.file_entry.insert(0, file_path)
-            file_size = os.path.getsize(file_path)
-            size_mb = file_size / (1024 * 1024)
-            self.log_message(f"✅ Selected: {os.path.basename(file_path)} ({size_mb:.2f} MB)")
-            self.file_entry.configure(border_color=["#4CAF50", "#66BB6A"])
-            self.after(2000, lambda: self.file_entry.configure(border_color=["#4A90E2", "#5BA3F5"]))
+            self.set_audio_file(file_path)
 
     def log_message(self, message):
         timestamp = time.strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}"
         self.results_text.insert(tk.END, formatted_message + "\n")
         self.results_text.see(tk.END)
-        self.after(100, lambda: self.results_text.see(tk.END))
 
     def update_status(self, message, color=None):
         if color:
@@ -306,19 +406,44 @@ class GeminiAudioApp(ctk.CTk):
     def process_audio(self):
         if self.processing:
             return
-        if not self.audio_file_path or not os.path.exists(self.audio_file_path):
+        
+        # Validate file selection
+        if not self.audio_file_path:
             self.log_message("❌ Error: Please select a valid audio file first.")
             self.update_status("❌ No file selected", ["#FF5252", "#FF6B6B"])
             return
+        
+        # Re-validate file in case it was moved/deleted
+        is_valid, message = validate_audio_file(self.audio_file_path)
+        if not is_valid:
+            self.log_message(f"❌ File validation failed: {message}")
+            self.update_status("❌ File validation failed", ["#FF5252", "#FF6B6B"])
+            return
 
+        # Validate prompts
         transcript_prompt = self.transcript_text.get("1.0", tk.END).strip() or DEFAULT_TRANS_PROMPT
         memo_prompt = self.memo_text.get("1.0", tk.END).strip() or DEFAULT_MEMO_PROMPT
+        
+        trans_valid, trans_msg = validate_prompt_input(transcript_prompt)
+        if not trans_valid:
+            self.log_message(f"❌ Transcript prompt validation failed: {trans_msg}")
+            self.update_status("❌ Invalid transcript prompt", ["#FF5252", "#FF6B6B"])
+            return
+            
+        memo_valid, memo_msg = validate_prompt_input(memo_prompt)
+        if not memo_valid:
+            self.log_message(f"❌ Memo prompt validation failed: {memo_msg}")
+            self.update_status("❌ Invalid memo prompt", ["#FF5252", "#FF6B6B"])
+            return
+        
         method = self.method_var.get()
 
         self.processing = True
-        self.progress_bar.set(0.5)
+        self.api_start_time = time.time()
+        self.progress_bar.set(0.1)
         self.process_btn.configure(state="disabled", text="⏳ Processing...")
         self.update_status("🔄 Processing audio file...", ["#FF9800", "#FFB74D"])
+        self.log_message("🚀 Starting audio processing...")
 
         thread = threading.Thread(
             target=self.process_thread,
@@ -328,29 +453,44 @@ class GeminiAudioApp(ctk.CTk):
         thread.start()
 
     def process_thread(self, audio_file_path, transcript_prompt, memo_prompt, method):
+        file_size = os.path.getsize(audio_file_path)
+        processing_error = None
+        
         try:
-            file_size = os.path.getsize(audio_file_path)
             genai.configure(api_key=API_KEY)
             model = genai.GenerativeModel(MODEL_NAME)
 
             self.update_status("🎯 Generating transcript...")
+            self.progress_bar.set(0.2)
             self.log_message(f"🔧 Using {method} method (File size: {file_size:,} bytes)")
 
             if method == "upload" or (method == "auto" and file_size >= INLINE_THRESHOLD):
                 self.log_message("☁️ Using cloud upload method")
+                self.progress_bar.set(0.3)
                 uploaded_file = genai.upload_file(path=audio_file_path)
+                self.progress_bar.set(0.4)
                 transcript_response = model.generate_content([transcript_prompt, uploaded_file])
+                self.progress_bar.set(0.6)
             else:
                 self.log_message("⚡ Using inline processing method")
+                self.progress_bar.set(0.3)
                 with open(audio_file_path, 'rb') as f:
                     audio_data = f.read()
+                self.progress_bar.set(0.4)
                 transcript_response = model.generate_content([
                     transcript_prompt,
                     {"mime_type": "audio/mp3", "data": audio_data}
                 ])
+                self.progress_bar.set(0.6)
 
             transcript = transcript_response.text
+            self.progress_bar.set(0.7)
             self.log_message("✅ Transcript generated successfully!")
+            
+            # Display transcript API usage
+            transcript_usage = format_api_usage("Transcript Generation", file_size, 
+                                              time.time() - self.api_start_time, True, None, transcript_response)
+            self.log_message(transcript_usage)
 
             with open(TRANSCRIPT_FILENAME, "w", encoding="utf-8") as f:
                 f.write(transcript)
@@ -358,27 +498,53 @@ class GeminiAudioApp(ctk.CTk):
             self.transcript = transcript
 
             self.update_status("📋 Generating intelligent memo...")
+            self.progress_bar.set(0.8)
+            memo_start_time = time.time()
             memo_response = model.generate_content([memo_prompt, transcript])
-            memo_content = memo_response.text.replace("```html", "").replace("```", "").strip()
-
-            if not memo_content.strip().startswith('<!DOCTYPE html>'):
-                memo_content = f"{memo_content}"
+            self.progress_bar.set(0.9)
+            memo_content = memo_response.text.replace("```markdown", "").replace("```md", "").replace("```", "").strip()
+            
+            # Display memo API usage
+            memo_usage = format_api_usage("Memo Generation", len(transcript.encode('utf-8')), 
+                                        time.time() - memo_start_time, True, None, memo_response)
+            self.log_message(memo_usage)
 
             with open(MEMO_FILENAME, "w", encoding="utf-8") as f:
                 f.write(memo_content)
             self.log_message(f"📋 Memo saved to {MEMO_FILENAME}")
 
+            # Calculate total processing time
+            processing_time = time.time() - self.api_start_time
+            self.progress_bar.set(1.0)
+            
+            # Display total usage statistics
+            total_usage = format_api_usage("Total Processing", file_size, processing_time, success=True)
+            self.log_message(total_usage)
+            self.log_message(f"⏱️ Total processing completed in {processing_time:.2f} seconds")
+            
             self.update_status("🎉 Processing completed successfully!", ["#4CAF50", "#66BB6A"])
-            self.log_message("🌐 Opening memo in browser...")
-            webbrowser.open(MEMO_FILENAME)
+            self.log_message(f"📄 Opening memo file: {MEMO_FILENAME}")
+            
+            # Use absolute path for cross-platform compatibility
+            memo_path = os.path.abspath(MEMO_FILENAME)
+            webbrowser.open(f"file://{memo_path}")
 
         except Exception as e:
-            self.log_message(f"💥 Error occurred: {str(e)}")
+            processing_error = str(e)
+            self.log_message(f"💥 Error occurred: {processing_error}")
             self.update_status("❌ Processing failed", ["#FF5252", "#FF6B6B"])
+            
+            # Display failed usage info
+            if self.api_start_time:
+                processing_time = time.time() - self.api_start_time
+                failed_usage = format_api_usage("Failed Processing", file_size, processing_time, success=False, error=processing_error)
+                self.log_message(failed_usage)
         finally:
             self.processing = False
-            self.progress_bar.set(0)
+            # Keep progress bar at current level for a moment, then reset
+            self.after(2000, lambda: self.progress_bar.set(0))
             self.process_btn.configure(state="normal", text="🚀 Process Audio")
+            self.api_start_time = None
 
 def main():
     if len(os.sys.argv) > 1:
@@ -397,11 +563,20 @@ def cli_main():
                         help="Audio upload method")
     args = parser.parse_args()
 
-    if not os.path.exists(args.audio_file):
-        print("❌ Error: The file does not exist.")
+    # Validate audio file
+    is_valid, message = validate_audio_file(args.audio_file)
+    if not is_valid:
+        print(f"❌ File validation failed: {message}")
+        return
+    
+    # Validate prompt
+    prompt_valid, prompt_msg = validate_prompt_input(args.prompt)
+    if not prompt_valid:
+        print(f"❌ Prompt validation failed: {prompt_msg}")
         return
 
     file_size = os.path.getsize(args.audio_file)
+    start_time = time.time()
     genai.configure(api_key=API_KEY)
     model = genai.GenerativeModel(MODEL_NAME)
 
@@ -426,14 +601,28 @@ def cli_main():
         print(f"💾 Transcript saved to {TRANSCRIPT_FILENAME}")
 
         memo_response = model.generate_content([DEFAULT_MEMO_PROMPT, transcript])
-        memo_content = memo_response.text.replace("```html", "").replace("```", "").strip()
-        if not memo_content.strip().startswith('<!DOCTYPE html>'):
-            memo_content = f"{memo_content}"
+        memo_content = memo_response.text.replace("```markdown", "").replace("```md", "").replace("```", "").strip()
         with open(MEMO_FILENAME, "w", encoding="utf-8") as f:
             f.write(memo_content)
         print(f"📋 Memo saved to {MEMO_FILENAME}")
+        
+        # Display API usage statistics
+        processing_time = time.time() - start_time
+        
+        # Try to get token usage from responses
+        transcript_usage = format_api_usage("CLI Transcript", file_size, processing_time/2, True, None, transcript_response)
+        memo_usage = format_api_usage("CLI Memo", len(transcript.encode('utf-8')), processing_time/2, True, None, memo_response)
+        total_usage = format_api_usage("CLI Total", file_size, processing_time, success=True)
+        
+        print("\n" + transcript_usage)
+        print("\n" + memo_usage) 
+        print("\n" + total_usage)
+        print(f"\n⏱️ Processing completed in {processing_time:.2f} seconds")
 
     except Exception as e:
+        processing_time = time.time() - start_time
+        failed_usage = format_api_usage("CLI Failed Processing", file_size, processing_time, success=False, error=str(e))
+        print("\n" + failed_usage)
         print("💥 An error occurred:", e)
 
 if __name__ == "__main__":
