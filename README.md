@@ -18,6 +18,7 @@ Transform audio recordings into professional transcripts and actionable memos us
 - 🛡️ **File Validation** - Comprehensive format, size, and integrity checking
 - 📊 **API Usage Tracking** - Real-time token counts and processing statistics
 - 🔄 **Real Progress Bar** - Step-by-step progress indication during processing
+- 🔑 **Built-in API Key Manager** - Easy setup and management of Gemini API keys
 
 ## 🚀 Quick Start
 
@@ -38,15 +39,17 @@ Transform audio recordings into professional transcripts and actionable memos us
    cd memomaker
    ```
 
-2. **Set your Google API key**:
+2. **Set your Gemini API key**:
    ```bash
-   export GOOGLE_API_KEY="your-api-key-here"
+   export GEMINI_API_KEY="your-api-key-here"
    ```
    
    Or on Windows:
    ```cmd
-   set GOOGLE_API_KEY=your-api-key-here
+   set GEMINI_API_KEY=your-api-key-here
    ```
+   
+   **Or use the built-in API key manager**: The app will show a setup dialog if no API key is found.
 
 3. **Run the application**:
    ```bash
@@ -66,8 +69,9 @@ Transform audio recordings into professional transcripts and actionable memos us
    - ☁️ **Cloud Upload** - Better for larger files (>20MB)
 5. **Customize prompts** (optional) - Edit transcription and memo prompts in the tabs
 6. **Process** - Click "Process Audio" and watch real-time progress
-7. **View results** - Transcript saves to `transcript.txt`, memo saves to `memo.md` and opens automatically
-8. **Monitor usage** - View detailed API usage statistics including token counts in the results area
+7. **Manage API key** (optional) - Click "🔑 API Key" button to view/edit your Gemini API key
+8. **View results** - Transcript saves to `transcript.txt`, memo saves to `memo.md` and opens automatically
+9. **Monitor usage** - View detailed API usage statistics including token counts in the results area
 
 ### CLI Mode
 
@@ -81,7 +85,7 @@ python memomaker-ui.py audio_file.mp3 [--method auto|inline|upload] [--prompt "c
 
 ```python
 # API Configuration
-API_KEY = os.environ.get("GOOGLE_API_KEY")
+API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # Model Settings
 MODEL_NAME = 'gemini-flash-latest'
@@ -165,7 +169,8 @@ pip install customtkinter
 
 **"Invalid API key"**
 - Verify your Google API key is correct
-- Check environment variable is set: `echo $GOOGLE_API_KEY`
+- Check environment variable is set: `echo $GEMINI_API_KEY` (Linux/Mac) or `echo %GEMINI_API_KEY%` (Windows)
+- Use the built-in "🔑 API Key" button to set up your key
 
 **"File validation failed" errors**
 - Check file format (supported: MP3, WAV, M4A, OGG, FLAC, AAC)

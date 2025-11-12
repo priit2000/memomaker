@@ -497,7 +497,7 @@ class GeminiAudioApp(ctk.CTk):
         
         # Instructions
         instructions = ctk.CTkLabel(content_frame,
-                                   text="Get your API key from Google AI Studio:\nhttps://aistudio.google.com/app/apikey\n\nPaste your API key below:",
+                                   text="Get API key from Google AI Studio:\nhttps://aistudio.google.com/app/apikey\n\nPaste your API key below:",
                                    font=ctk.CTkFont(size=12),
                                    justify="center")
         instructions.pack(pady=(0, 15))
@@ -520,7 +520,7 @@ class GeminiAudioApp(ctk.CTk):
         button_frame.pack(fill=tk.X)
         
         save_btn = ctk.CTkButton(button_frame,
-                                text="💾 Save API Key",
+                                text="Save API Key",
                                 command=lambda: self.save_api_key(dialog),
                                 width=150,
                                 height=35,
@@ -528,7 +528,7 @@ class GeminiAudioApp(ctk.CTk):
         save_btn.pack(side=tk.LEFT, padx=(50, 10))
         
         cancel_btn = ctk.CTkButton(button_frame,
-                                  text="❌ Cancel",
+                                  text="Cancel",
                                   command=dialog.destroy,
                                   width=100,
                                   height=35,
@@ -538,7 +538,7 @@ class GeminiAudioApp(ctk.CTk):
         
         # Open browser button
         browser_btn = ctk.CTkButton(button_frame,
-                                   text="🌐 Open AI Studio",
+                                   text="Get API key",
                                    command=lambda: webbrowser.open("https://aistudio.google.com/app/apikey"),
                                    width=130,
                                    height=35,
