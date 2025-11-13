@@ -13,7 +13,6 @@ Transform audio recordings into professional transcripts and actionable memos us
 - 📱 **Speech-Optimized** - 22kHz mono recording perfect for meetings
 - 💾 **Efficient MP3 Encoding** - Small file sizes without external dependencies
 - 📁 **Organized Storage** - Auto-creates recordings folder with timestamped files
-- 🎨 **Modern UI** - Clean dark-themed interface with real-time progress tracking
 - 🌍 **Multi-Language Support** - Estonian and English prompts with easy language switching
 - ⚡ **Multiple Processing Methods** - Inline, cloud upload, or auto-detection
 - 📝 **Configurable Prompts** - Customize transcription and memo generation
