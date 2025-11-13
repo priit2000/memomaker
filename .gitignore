@@ -91,6 +91,9 @@ transcript.txt
 memo.html
 memo.md
 
+# Recordings folder - contains user-generated content
+recordings/
+
 # Keep important script files
 !transcription-prompt*.md
 !README.md

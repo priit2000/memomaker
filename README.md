@@ -8,7 +8,11 @@ Transform audio recordings into professional transcripts and actionable memos us
 
 ## ✨ Features
 
+- 🎤 **Built-in Recording** - Record meetings directly with one-click start/stop
 - 🎯 **Smart Audio Processing** - Automatic detection of optimal processing method
+- 📱 **Speech-Optimized** - 22kHz mono recording perfect for meetings
+- 💾 **Efficient MP3 Encoding** - Small file sizes without external dependencies
+- 📁 **Organized Storage** - Auto-creates recordings folder with timestamped files
 - 🎨 **Modern UI** - Clean dark-themed interface with real-time progress tracking
 - 🌍 **Multi-Language Support** - Estonian and English prompts with easy language switching
 - ⚡ **Multiple Processing Methods** - Inline, cloud upload, or auto-detection
@@ -28,7 +32,7 @@ Transform audio recordings into professional transcripts and actionable memos us
 2. **Google API Key** - Get one from [Google AI Studio](https://aistudio.google.com/app/apikey)
 3. **Required packages**:
    ```bash
-   pip install customtkinter google-generativeai pillow
+   pip install customtkinter google-generativeai pillow sounddevice scipy numpy lameenc
    ```
 
 ### Setup
@@ -60,6 +64,15 @@ Transform audio recordings into professional transcripts and actionable memos us
 
 ### GUI Mode (Recommended)
 
+#### Recording Mode (New!)
+1. **Launch the app** - Run `python memomaker-ui.py`
+2. **Start recording** - Click "🎤 Start Recording" button
+3. **Record your meeting** - Speak clearly into your microphone
+4. **Stop recording** - Click "🛑 Stop Recording" when finished
+5. **Auto-processing** - App automatically processes the recording and generates transcript + memo
+6. **View results** - Files saved in `recordings/` folder with timestamp naming
+
+#### File Mode
 1. **Launch the app** - Run `python memomaker-ui.py`
 2. **Select audio file** - Click "Browse" and choose your audio file (or click the file path field)
 3. **Choose language** - Select Estonian (ET) or English (EN) from the language dropdown
@@ -70,7 +83,7 @@ Transform audio recordings into professional transcripts and actionable memos us
 5. **Customize prompts** (optional) - Edit transcription and memo prompts in the tabs
 6. **Process** - Click "Process Audio" and watch real-time progress
 7. **Manage API key** (optional) - Click "🔑 API Key" button to view/edit your Gemini API key
-8. **View results** - Transcript saves to `transcript.txt`, memo saves to `memo.md` and opens automatically
+8. **View results** - Files saved in `recordings/` folder with organized naming
 9. **Monitor usage** - View detailed API usage statistics including token counts in the results area
 
 ### CLI Mode
@@ -130,8 +143,10 @@ memomaker/
 ├── transcription-prompt-en.md   # English prompts
 ├── .gitignore                  # Git ignore rules
 ├── README.md                   # This file
-├── transcript.txt              # Generated transcript (after processing)
-└── memo.md                     # Generated memo (after processing)
+└── recordings/                 # Auto-created folder for all outputs
+    ├── 241113-143022-recording.mp3    # Recorded audio
+    ├── 241113-143022-transcript.txt   # Generated transcript
+    └── 241113-143022-memo.md          # Generated memo
 ```
 
 ## 🎨 Processing Methods
@@ -197,6 +212,10 @@ pip install customtkinter
 - customtkinter
 - google-generativeai
 - Pillow
+- sounddevice (for recording)
+- scipy (for audio processing)
+- numpy (for audio data)
+- lameenc (for MP3 encoding)
 
 ### Contributing
 
@@ -208,6 +227,9 @@ pip install customtkinter
 
 ## 📋 Roadmap
 
+- [x] **Built-in recording** - Direct audio capture (completed)
+- [x] **MP3 optimization** - Speech-optimized recording (completed)
+- [x] **Organized file structure** - Timestamped file naming (completed)
 - [ ] **Batch processing** - Process multiple files
 - [ ] **Export formats** - PDF, Word, plain text
 - [ ] **Audio player** - Built-in playback with waveform
@@ -227,21 +249,34 @@ pip install customtkinter
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## 📊 New Features
+## 📊 Key Features Detailed
 
-### API Usage Tracking
+### 🎤 Built-in Audio Recording
+- **One-click recording**: Start/stop with visual feedback
+- **Speech-optimized**: 22kHz mono recording perfect for meetings
+- **Efficient encoding**: Direct MP3 encoding with lameenc (no external tools needed)
+- **Auto-processing**: Automatically processes recorded audio when recording stops
+- **File size optimization**: ~1MB per minute vs ~10MB for standard recording
+
+### 📁 Organized File Management
+- **Auto-folder creation**: `recordings/` folder created automatically
+- **Timestamped naming**: `yymmdd-hhmmss-[type]` format for easy organization
+- **Session grouping**: All files from same recording session have matching timestamps
+- **Example**: `241113-143022-recording.mp3`, `241113-143022-transcript.txt`, `241113-143022-memo.md`
+
+### 📊 API Usage Tracking
 - **Real-time statistics** displayed in results area
 - **Token counts**: Input, output, and total tokens
 - **Processing time**: Detailed timing for each operation
 - **No log files**: All data shown directly in UI
 
-### File Validation
+### 🛡️ File Validation
 - **Format checking**: Validates audio file extensions and MIME types
 - **Size limits**: Enforces minimum (1KB) and maximum (100MB) file sizes
 - **Integrity checks**: Basic corruption detection
 - **Clear error messages**: Specific validation failure details
 
-### Real Progress Bar
+### 🔄 Real Progress Bar
 - **Step-by-step progress**: Shows actual processing stages
 - **Visual feedback**: Progress from 0.1 (start) to 1.0 (complete)
 - **Stays visible**: Progress remains visible for 2 seconds after completion

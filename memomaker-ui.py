@@ -12,6 +12,14 @@ import time
 import mimetypes
 import pathlib
 import glob
+import numpy as np
+import sounddevice as sd
+import scipy.io.wavfile as wavfile
+try:
+    import lameenc
+    LAMEENC_AVAILABLE = True
+except ImportError:
+    LAMEENC_AVAILABLE = False
 
 # ============================================================================
 # USER SETTINGS & CONFIGURATION
@@ -37,9 +45,12 @@ VALID_MIME_TYPES = {
 }
 
 
-# File paths (cross-platform compatible) 
-TRANSCRIPT_FILENAME = os.path.join(os.getcwd(), "transcript.txt")
-MEMO_FILENAME = os.path.join(os.getcwd(), "memo.md")
+# Create recordings folder
+RECORDINGS_FOLDER = os.path.join(os.getcwd(), "recordings")
+if not os.path.exists(RECORDINGS_FOLDER):
+    os.makedirs(RECORDINGS_FOLDER)
+
+# File naming will be handled dynamically with session timestamp
 
 # Language detection and prompt file handling
 def detect_available_languages():
@@ -175,7 +186,7 @@ else:
 
 # UI Settings
 APP_TITLE = "✨ Gemini Audio Processor Pro"
-APP_SUBTITLE = "Transform audio into intelligent transcripts and memos"
+APP_SUBTITLE = "Record, transcribe and create intelligent memos"
 WINDOW_WIDTH = 1000
 WINDOW_HEIGHT = 800
 MIN_WIDTH = 900
@@ -193,6 +204,129 @@ SUPPORTED_AUDIO_TYPES = [
 # END USER SETTINGS
 # ============================================================================
 
+class AudioRecorder:
+    def __init__(self, callback=None):
+        self.is_recording = False
+        self.audio_data = []
+        self.sample_rate = 22050  # Optimized for speech
+        self.channels = 1  # Mono for speech
+        self.output_folder = RECORDINGS_FOLDER
+        self.audio_path = None
+        self.temp_wav_path = None
+        self.session_timestamp = None
+        self.callback = callback  # Callback to notify when recording is complete
+        
+    def start_recording(self):
+        """Start audio recording."""
+        if self.is_recording:
+            return False
+            
+        self.is_recording = True
+        # Use session timestamp format: yymmdd-hhmmss
+        self.session_timestamp = time.strftime("%y%m%d-%H%M%S")
+        self.temp_wav_path = os.path.join(self.output_folder, f"temp_{self.session_timestamp}.wav")
+        self.audio_path = os.path.join(self.output_folder, f"{self.session_timestamp}-recording.mp3")
+        self.audio_data = []
+        
+        self.audio_thread = threading.Thread(target=self.record_audio)
+        self.audio_thread.daemon = True
+        self.audio_thread.start()
+        
+        return True
+    
+    def stop_recording(self):
+        """Stop audio recording and save file."""
+        if not self.is_recording:
+            return None
+            
+        self.is_recording = False
+        
+        if hasattr(self, 'audio_thread'):
+            self.audio_thread.join()
+        
+        saved_path = self.save_recording()
+        
+        if self.callback and saved_path:
+            self.callback(saved_path)
+            
+        return saved_path
+    
+    def record_audio(self):
+        """Record audio in chunks."""
+        try:
+            duration = 1.0
+            
+            while self.is_recording:
+                try:
+                    audio = sd.rec(int(duration * self.sample_rate), 
+                                 samplerate=self.sample_rate, 
+                                 channels=self.channels, 
+                                 dtype=np.int16)
+                    sd.wait()
+                    self.audio_data.append(audio)
+                    
+                except Exception as e:
+                    print(f"Audio error: {e}")
+                    break
+                    
+        except Exception as e:
+            print(f"Audio setup error: {e}")
+    
+    def save_recording(self):
+        """Save recorded audio to MP3 file using lameenc."""
+        try:
+            if self.audio_data:
+                audio_array = np.concatenate(self.audio_data, axis=0)
+                
+                if LAMEENC_AVAILABLE:
+                    # Convert directly to MP3 using lameenc
+                    success = self.encode_to_mp3(audio_array, self.audio_path)
+                    if success:
+                        return self.audio_path
+                
+                # Fallback to WAV if MP3 encoding failed
+                wav_path = os.path.join(self.output_folder, f"{self.session_timestamp}-recording.wav")
+                wavfile.write(wav_path, self.sample_rate, audio_array)
+                return wav_path
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"Save error: {e}")
+            return None
+    
+    def encode_to_mp3(self, audio_data, mp3_path):
+        """Encode audio data to MP3 using lameenc."""
+        try:
+            # Ensure audio is in the right format for lameenc (int16)
+            if audio_data.dtype != np.int16:
+                audio_data = audio_data.astype(np.int16)
+            
+            # Flatten to 1D array if mono
+            if len(audio_data.shape) > 1 and audio_data.shape[1] == 1:
+                audio_data = audio_data.flatten()
+            
+            # Create MP3 encoder
+            encoder = lameenc.Encoder()
+            encoder.set_bit_rate(128)  # 128 kbps
+            encoder.set_in_sample_rate(self.sample_rate)
+            encoder.set_channels(self.channels)
+            encoder.set_quality(2)  # Good quality
+            
+            # Encode to MP3
+            mp3_data = encoder.encode(audio_data.tobytes())
+            mp3_data += encoder.flush()
+            
+            # Write MP3 file
+            with open(mp3_path, 'wb') as f:
+                f.write(mp3_data)
+            
+            return True
+            
+        except Exception as e:
+            print(f"MP3 encoding error: {e}")
+            return False
+
 class GeminiAudioApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -209,9 +343,22 @@ class GeminiAudioApp(ctk.CTk):
         self.processing = False
         self.api_start_time = None
         self.current_language = DEFAULT_LANGUAGE
+        # Audio recording
+        self.audio_recorder = AudioRecorder(callback=self.on_recording_complete)
+        self.recording = False
+        self.current_session_timestamp = None
         self.create_widgets()
         self.setup_drag_drop()
+        self.check_mp3_support()
         self.check_api_key()
+    
+    def check_mp3_support(self):
+        """Check if MP3 encoding is available."""
+        if LAMEENC_AVAILABLE:
+            self.log_message("✅ MP3 encoding available - optimized for meetings")
+        else:
+            self.log_message("⚠️ MP3 encoding not available - recordings will be WAV")
+            self.log_message("💡 For smaller files, install: pip install lameenc")
 
     def create_widgets(self):
         # Main container
@@ -241,7 +388,7 @@ class GeminiAudioApp(ctk.CTk):
                                 text_color=["#888888", "#AAAAAA"])
         subtitle.pack(side=tk.LEFT, padx=(20, 0))
 
-        # File selection
+        # File selection and recording
         file_section = ctk.CTkFrame(main_container,
                                     fg_color=["#1A1A2E", "#252540"],
                                     corner_radius=20,
@@ -250,13 +397,43 @@ class GeminiAudioApp(ctk.CTk):
         file_section.pack(fill=tk.X, pady=(0, 20))
 
         file_header = ctk.CTkLabel(file_section,
-                                   text="📁 Audio File Selection",
+                                   text="📁 Audio Input",
                                    font=ctk.CTkFont(size=18, weight="bold"),
                                    text_color=["#E0E0E0", "#F0F0F0"])
         file_header.pack(anchor="w", padx=20, pady=(15, 10))
 
-        file_input_frame = ctk.CTkFrame(file_section, fg_color="transparent")
-        file_input_frame.pack(fill=tk.X, padx=20, pady=(0, 15))
+        # Recording section
+        record_frame = ctk.CTkFrame(file_section, fg_color="transparent")
+        record_frame.pack(fill=tk.X, padx=20, pady=(0, 15))
+
+        self.record_btn = ctk.CTkButton(record_frame,
+                                       text="🎤 Start Recording",
+                                       command=self.toggle_recording,
+                                       width=150,
+                                       height=45,
+                                       font=ctk.CTkFont(size=14, weight="bold"),
+                                       corner_radius=15,
+                                       fg_color=["#4CAF50", "#66BB6A"])
+        self.record_btn.pack(side=tk.LEFT, padx=(0, 15))
+
+        # Recording status
+        self.record_status_var = tk.StringVar(value="Ready to record")
+        self.record_status_label = ctk.CTkLabel(record_frame,
+                                               textvariable=self.record_status_var,
+                                               font=ctk.CTkFont(size=12),
+                                               text_color=["#AAAAAA", "#CCCCCC"])
+        self.record_status_label.pack(side=tk.LEFT, padx=(0, 20))
+
+        # Separator
+        separator = ctk.CTkLabel(record_frame,
+                                text="OR",
+                                font=ctk.CTkFont(size=12, weight="bold"),
+                                text_color=["#666666", "#888888"])
+        separator.pack(side=tk.LEFT, padx=(20, 20))
+
+        # File input
+        file_input_frame = ctk.CTkFrame(record_frame, fg_color="transparent")
+        file_input_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         self.file_entry = ctk.CTkEntry(file_input_frame,
                                        height=45,
@@ -456,6 +633,55 @@ class GeminiAudioApp(ctk.CTk):
                                          font=ctk.CTkFont(size=16, weight="bold"),
                                          corner_radius=25)
         self.process_btn.pack(side=tk.RIGHT, padx=(20, 0))
+        
+    def toggle_recording(self):
+        """Toggle audio recording."""
+        if not self.recording:
+            self.start_recording()
+        else:
+            self.stop_recording()
+    
+    def start_recording(self):
+        """Start audio recording."""
+        if self.audio_recorder.start_recording():
+            self.recording = True
+            self.record_btn.configure(text="🛑 Stop Recording", fg_color=["#F44336", "#FF5252"])
+            self.record_status_var.set("Recording... 🔴")
+            self.log_message("🎤 Recording started...")
+            self.update_status("🔴 Recording in progress...", ["#FF9800", "#FFB74D"])
+        else:
+            self.log_message("❌ Failed to start recording")
+    
+    def stop_recording(self):
+        """Stop audio recording."""
+        self.recording = False
+        self.record_btn.configure(text="🎤 Start Recording", fg_color=["#4CAF50", "#66BB6A"])
+        self.record_status_var.set("Stopping recording...")
+        self.log_message("⏹️ Stopping recording...")
+        
+        # Stop recording in a separate thread to avoid blocking UI
+        threading.Thread(target=self.audio_recorder.stop_recording, daemon=True).start()
+    
+    def on_recording_complete(self, audio_path):
+        """Callback when recording is complete."""
+        if audio_path and os.path.exists(audio_path):
+            self.record_status_var.set("Recording complete")
+            file_size = os.path.getsize(audio_path) / (1024 * 1024)  # MB
+            self.log_message(f"✅ Recording saved: {os.path.basename(audio_path)} ({file_size:.1f} MB)")
+            
+            # Store session timestamp from the audio recorder
+            self.current_session_timestamp = self.audio_recorder.session_timestamp
+            
+            # Set the recorded file as the audio file and start processing
+            if self.set_audio_file(audio_path):
+                self.log_message("🚀 Auto-processing recorded audio...")
+                # Auto-process the recorded file after a short delay
+                self.after(1000, self.process_audio)
+        else:
+            self.record_status_var.set("Recording failed")
+            self.log_message("❌ Recording failed to save")
+            self.update_status("❌ Recording failed", ["#FF5252", "#FF6B6B"])
+            
     def setup_drag_drop(self):
         """Setup file entry click handler."""
         self.file_entry.bind("<Button-1>", self.on_entry_click)
@@ -805,9 +1031,17 @@ class GeminiAudioApp(ctk.CTk):
                                               time.time() - self.api_start_time, True, None, transcript_response)
             self.log_message(transcript_usage)
 
-            with open(TRANSCRIPT_FILENAME, "w", encoding="utf-8") as f:
+            # Generate transcript filename using session timestamp
+            if hasattr(self, 'current_session_timestamp') and self.current_session_timestamp:
+                transcript_filename = os.path.join(RECORDINGS_FOLDER, f"{self.current_session_timestamp}-transcript.txt")
+            else:
+                # Fallback for file-based processing
+                timestamp = time.strftime("%y%m%d-%H%M%S")
+                transcript_filename = os.path.join(RECORDINGS_FOLDER, f"{timestamp}-transcript.txt")
+            
+            with open(transcript_filename, "w", encoding="utf-8") as f:
                 f.write(transcript)
-            self.log_message(f"💾 Transcript saved to {TRANSCRIPT_FILENAME}")
+            self.log_message(f"💾 Transcript saved to {os.path.basename(transcript_filename)}")
             self.transcript = transcript
 
             self.update_status("📋 Generating intelligent memo...")
@@ -822,9 +1056,17 @@ class GeminiAudioApp(ctk.CTk):
                                         time.time() - memo_start_time, True, None, memo_response)
             self.log_message(memo_usage)
 
-            with open(MEMO_FILENAME, "w", encoding="utf-8") as f:
+            # Generate memo filename using session timestamp
+            if hasattr(self, 'current_session_timestamp') and self.current_session_timestamp:
+                memo_filename = os.path.join(RECORDINGS_FOLDER, f"{self.current_session_timestamp}-memo.md")
+            else:
+                # Fallback for file-based processing
+                timestamp = time.strftime("%y%m%d-%H%M%S")
+                memo_filename = os.path.join(RECORDINGS_FOLDER, f"{timestamp}-memo.md")
+            
+            with open(memo_filename, "w", encoding="utf-8") as f:
                 f.write(memo_content)
-            self.log_message(f"📋 Memo saved to {MEMO_FILENAME}")
+            self.log_message(f"📋 Memo saved to {os.path.basename(memo_filename)}")
 
             # Calculate total processing time
             processing_time = time.time() - self.api_start_time
@@ -836,10 +1078,10 @@ class GeminiAudioApp(ctk.CTk):
             self.log_message(f"⏱️ Total processing completed in {processing_time:.2f} seconds")
             
             self.update_status("🎉 Processing completed successfully!", ["#4CAF50", "#66BB6A"])
-            self.log_message(f"📄 Opening memo file: {MEMO_FILENAME}")
+            self.log_message(f"📄 Opening memo file: {os.path.basename(memo_filename)}")
             
             # Use absolute path for cross-platform compatibility
-            memo_path = os.path.abspath(MEMO_FILENAME)
+            memo_path = os.path.abspath(memo_filename)
             webbrowser.open(f"file://{memo_path}")
 
         except Exception as e:
@@ -909,15 +1151,20 @@ def cli_main():
         transcript = transcript_response.text
         print("📝 Transcript:")
         print(transcript)
-        with open(TRANSCRIPT_FILENAME, "w", encoding="utf-8") as f:
+        # Generate filenames for CLI mode
+        timestamp = time.strftime("%y%m%d-%H%M%S")
+        transcript_filename = os.path.join(RECORDINGS_FOLDER, f"{timestamp}-transcript.txt")
+        memo_filename = os.path.join(RECORDINGS_FOLDER, f"{timestamp}-memo.md")
+        
+        with open(transcript_filename, "w", encoding="utf-8") as f:
             f.write(transcript)
-        print(f"💾 Transcript saved to {TRANSCRIPT_FILENAME}")
+        print(f"💾 Transcript saved to {os.path.basename(transcript_filename)}")
 
         memo_response = model.generate_content([DEFAULT_MEMO_PROMPT, transcript])
         memo_content = memo_response.text.replace("```markdown", "").replace("```md", "").replace("```", "").strip()
-        with open(MEMO_FILENAME, "w", encoding="utf-8") as f:
+        with open(memo_filename, "w", encoding="utf-8") as f:
             f.write(memo_content)
-        print(f"📋 Memo saved to {MEMO_FILENAME}")
+        print(f"📋 Memo saved to {os.path.basename(memo_filename)}")
         
         # Display API usage statistics
         processing_time = time.time() - start_time
