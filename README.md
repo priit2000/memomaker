@@ -1,296 +1,184 @@
-# 🎵 MemoMaker - Audio to Intelligent Memos
+# MemoMaker
 
-Transform audio recordings into professional transcripts and actionable memos using Google's Gemini AI.
+MemoMaker turns an existing audio file into a transcript and a structured written output using Google's Gemini API.
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![AI](https://img.shields.io/badge/AI-Google%20Gemini-orange.svg)
+The app supports GUI and CLI modes from `memomaker-ui.pyw`. It does not record audio. Select an existing audio file, choose a prompt profile, process it, and the app writes timestamped results to `outputs/`.
 
-## ✨ Features
+## Features
 
-- 🎤 **Built-in Recording** - Record meetings directly with one-click start/stop
-- 🎯 **Smart Audio Processing** - Automatic detection of optimal processing method
-- 📱 **Speech-Optimized** - 22kHz mono recording perfect for meetings
-- 💾 **Efficient MP3 Encoding** - Small file sizes without external dependencies
-- 📁 **Organized Storage** - Auto-creates recordings folder with timestamped files
-- 🌍 **Multi-Language Support** - Estonian and English prompts with easy language switching
-- ⚡ **Multiple Processing Methods** - Inline, cloud upload, or auto-detection
-- 📝 **Configurable Prompts** - Customize transcription and memo generation
-- 🔊 **Wide Audio Support** - MP3, WAV, M4A, OGG, FLAC, AAC formats
-- 📋 **Markdown Output** - Professional memo format with timestamps and action items
-- 🛡️ **File Validation** - Comprehensive format, size, and integrity checking
-- 📊 **API Usage Tracking** - Real-time token counts and processing statistics
-- 🔄 **Real Progress Bar** - Step-by-step progress indication during processing
-- 🔑 **Built-in API Key Manager** - Easy setup and management of Gemini API keys
+- File-based audio processing for MP3, WAV, M4A, OGG, FLAC, and AAC files
+- Gemini transcript generation plus a second configurable output step
+- Prompt profiles loaded from every `transcription-prompt-*.md` file in the app folder
+- Processing modes: auto, inline, and upload
+- File validation for extension, MIME type, size, and readability
+- GUI progress/status updates and API usage summaries
+- Built-in API key setup dialog
+- CLI mode for direct file processing
 
-## 🚀 Quick Start
+## Requirements
 
-### Prerequisites
+- Python 3.8+
+- Google Gemini API key
+- Python packages:
 
-1. **Python 3.8+**
-2. **Google API Key** - Get one from [Google AI Studio](https://aistudio.google.com/app/apikey)
-3. **Required packages**:
-   ```bash
-   pip install customtkinter google-generativeai pillow sounddevice scipy numpy lameenc
-   ```
-
-### Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/priit2000/memomaker.git
-   cd memomaker
-   ```
-
-2. **Set your Gemini API key**:
-   ```bash
-   export GEMINI_API_KEY="your-api-key-here"
-   ```
-   
-   Or on Windows:
-   ```cmd
-   set GEMINI_API_KEY=your-api-key-here
-   ```
-   
-   **Or use the built-in API key manager**: The app will show a setup dialog if no API key is found.
-
-3. **Run the application**:
-   ```bash
-   python memomaker-ui.py
-   ```
-
-## 🎯 How to Use
-
-### GUI Mode (Recommended)
-
-#### Recording Mode (New!)
-1. **Launch the app** - Run `python memomaker-ui.py`
-2. **Start recording** - Click "🎤 Start Recording" button
-3. **Record your meeting** - Speak clearly into your microphone
-4. **Stop recording** - Click "🛑 Stop Recording" when finished
-5. **Auto-processing** - App automatically processes the recording and generates transcript + memo
-6. **View results** - Files saved in `recordings/` folder with timestamp naming
-
-#### File Mode
-1. **Launch the app** - Run `python memomaker-ui.py`
-2. **Select audio file** - Click "Browse" and choose your audio file (or click the file path field)
-3. **Choose language** - Select Estonian (ET) or English (EN) from the language dropdown
-4. **Choose processing method**:
-   - 🎯 **Auto** - Smart detection based on file size
-   - ⚡ **Inline** - Fast processing for smaller files (<20MB)
-   - ☁️ **Cloud Upload** - Better for larger files (>20MB)
-5. **Customize prompts** (optional) - Edit transcription and memo prompts in the tabs
-6. **Process** - Click "Process Audio" and watch real-time progress
-7. **Manage API key** (optional) - Click "🔑 API Key" button to view/edit your Gemini API key
-8. **View results** - Files saved in `recordings/` folder with organized naming
-9. **Monitor usage** - View detailed API usage statistics including token counts in the results area
-
-### CLI Mode
-
-```bash
-python memomaker-ui.py audio_file.mp3 [--method auto|inline|upload] [--prompt "custom prompt"]
+```powershell
+pip install customtkinter google-generativeai
 ```
 
-## ⚙️ Configuration
+## API Key
 
-### Settings (Top of `memomaker-ui.py`)
+MemoMaker reads the API key from `GEMINI_API_KEY`.
+
+PowerShell:
+
+```powershell
+$env:GEMINI_API_KEY = "your-api-key-here"
+```
+
+Command Prompt:
+
+```cmd
+set GEMINI_API_KEY=your-api-key-here
+```
+
+The GUI also opens an API key dialog when no key is configured.
+
+## Run
+
+GUI mode:
+
+```powershell
+python .\memomaker-ui.pyw
+```
+
+CLI mode:
+
+```powershell
+python .\memomaker-ui.pyw .\audio_file.mp3 --method auto
+```
+
+Available CLI methods:
+
+- `auto`: uses inline processing below the configured threshold and upload processing for larger files
+- `inline`: sends the audio bytes directly in the request
+- `upload`: uploads the file through Gemini's file API before processing
+
+## GUI Workflow
+
+1. Launch `memomaker-ui.pyw`.
+2. Click `Browse` or the file path field.
+3. Select an audio file.
+4. Choose a prompt profile from the language/profile dropdown.
+5. Choose `Auto`, `Inline Processing`, or `Cloud Upload`.
+6. Edit the transcript/output prompts when needed.
+7. Click `Process Audio`.
+8. Open the generated files from `outputs/`.
+
+## Prompt Files
+
+Prompt profiles are detected from files named:
+
+```text
+transcription-prompt-*.md
+```
+
+The profile name comes from the filename. Examples:
+
+- `transcription-prompt-et.md` -> `ET`
+- `transcription-prompt-en.md` -> `EN`
+- `transcription-prompt-en-article.md` -> `EN-ARTICLE`
+
+Each prompt file must contain at least two top-level Markdown headings:
+
+```markdown
+# Transcription
+[transcription prompt]
+
+# Memo
+[memo/output prompt]
+```
+
+The first top-level section becomes the transcription prompt. The second top-level section, including any later headings, becomes the output prompt. The second heading can be `# Memo`, `# Article`, `# Summary`, or another profile-specific output type.
+
+## Output Files
+
+Generated files are written to `outputs/`:
+
+```text
+outputs/
+  260506-143022-transcript.txt
+  260506-143022-memo.md
+```
+
+The timestamp format is `yymmdd-hhmmss`.
+
+## Configuration
+
+Main settings are near the top of `memomaker-ui.pyw`:
 
 ```python
-# API Configuration
 API_KEY = os.environ.get("GEMINI_API_KEY")
+MODEL_NAME = 'gemini-3-flash-preview'
 
-# Model Settings
-MODEL_NAME = 'gemini-flash-latest'
+INLINE_THRESHOLD = 20 * 1024 * 1024
+MAX_FILE_SIZE = 100 * 1024 * 1024
+MIN_FILE_SIZE = 1024
 
-# File Processing Settings
-INLINE_THRESHOLD = 20 * 1024 * 1024  # 20 MB
-MAX_FILE_SIZE = 100 * 1024 * 1024     # 100 MB max
-MIN_FILE_SIZE = 1024                   # 1 KB min
-
-# Output File Settings
-TRANSCRIPT_FILENAME = "transcript.txt"
-MEMO_FILENAME = "memo.md"
-
-# UI Settings
-WINDOW_WIDTH = 1000
-WINDOW_HEIGHT = 800
+OUTPUT_FOLDER = os.path.join(os.getcwd(), "outputs")
 ```
 
-### Multi-Language Prompts
+## Project Files
 
-The app automatically detects and uses language-specific prompt files:
-
-- **Estonian**: `transcription-prompt-et.md`
-- **English**: `transcription-prompt-en.md` 
-- **Future**: `transcription-prompt-fr.md`, `transcription-prompt-de.md`, etc.
-
-Each file contains:
-- **Transcription rules** - Under `# Transkriptsioon`/`# Transcription` section
-- **Memo format** - Under `# Memo` section
-
-**Language Selection**:
-- Dropdown menu appears when multiple language files are present
-- Single language shows as label
-- Missing files show clear error messages in prompt areas
-
-## 📁 File Structure
-
-```
+```text
 memomaker/
-├── memomaker-ui.py              # Main application
-├── transcription-prompt-et.md   # Estonian prompts
-├── transcription-prompt-en.md   # English prompts
-├── .gitignore                  # Git ignore rules
-├── README.md                   # This file
-└── recordings/                 # Auto-created folder for all outputs
-    ├── 241113-143022-recording.mp3    # Recorded audio
-    ├── 241113-143022-transcript.txt   # Generated transcript
-    └── 241113-143022-memo.md          # Generated memo
+  memomaker-ui.pyw
+  transcription-prompt-et.md
+  transcription-prompt-en.md
+  transcription-prompt-en-article.md
+  test_prompt_loading.py
+  outputs/
 ```
 
-## 🎨 Processing Methods
+## Testing
 
-| Method | Best For | File Size | Speed | Quality |
-|--------|----------|-----------|-------|---------|
-| **Auto** | Most cases | Any | Smart | Optimal |
-| **Inline** | Quick processing | < 20MB | Fastest | Good |
-| **Upload** | Large files | > 20MB | Slower | Best |
+Run the regression tests:
 
-## 📝 Output Examples
-
-### Transcript Format
-```
-[00h:02m:15s] Priit Kallas: Alustame tänase koosoleku. Päevakorras on kolm punkti.
-[00h:02m:28s] Henrik Aavik: Tänan. Kas võiksime alustada eelmise nädala tulemustega?
-[00h:02m:45s] Priit Kallas: Kindlasti. Numbrid on väga head...
+```powershell
+python -m unittest .\test_prompt_loading.py
 ```
 
-### Memo Format (Markdown)
-- **Structured sections**: Participants, summary, decisions, actions
-- **Timestamps**: References to specific moments in audio
-- **Action items**: Clear responsibilities and deadlines
-- **Multi-language**: Professional business language (Estonian or English)
-- **Markdown format**: Easy to edit and convert to other formats
+Check Python syntax:
 
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**"No module named 'customtkinter'"**
-```bash
-pip install customtkinter
+```powershell
+python -m py_compile .\memomaker-ui.pyw
 ```
 
-**"Invalid API key"**
-- Verify your Google API key is correct
-- Check environment variable is set: `echo $GEMINI_API_KEY` (Linux/Mac) or `echo %GEMINI_API_KEY%` (Windows)
-- Use the built-in "🔑 API Key" button to set up your key
+## Troubleshooting
 
-**"File validation failed" errors**
-- Check file format (supported: MP3, WAV, M4A, OGG, FLAC, AAC)
-- Ensure file size is between 1KB and 100MB
-- Use "Upload" method for files > 20MB
-- Consider compressing large audio files
+### `No module named 'customtkinter'`
 
-**UI not appearing**
-- Ensure you're running GUI mode: `python memomaker-ui.py`
-- Check if running with command line arguments (switches to CLI mode)
-- Verify prompt files exist: `transcription-prompt-et.md` or `transcription-prompt-en.md`
+Install dependencies:
 
-### Performance Tips
+```powershell
+pip install customtkinter google-generativeai
+```
 
-- **Use MP3 format** for best compatibility
-- **Compress large files** before processing
-- **Close other applications** during processing for better performance
+### `Google API key not found`
 
-## 🛠️ Development
+Set `GEMINI_API_KEY` or use the GUI API key dialog.
 
-### Requirements
-- Python 3.8+
-- tkinter (usually included with Python)
-- customtkinter
-- google-generativeai
-- Pillow
-- sounddevice (for recording)
-- scipy (for audio processing)
-- numpy (for audio data)
-- lameenc (for MP3 encoding)
+### `File validation failed`
 
-### Contributing
+Check that the file:
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+- uses a supported extension: MP3, WAV, M4A, OGG, FLAC, or AAC
+- is between 1 KB and 100 MB
+- can be read from disk
 
-## 📋 Roadmap
+### Prompt profile fails to load
 
-- [x] **Built-in recording** - Direct audio capture (completed)
-- [x] **MP3 optimization** - Speech-optimized recording (completed)
-- [x] **Organized file structure** - Timestamped file naming (completed)
-- [ ] **Batch processing** - Process multiple files
-- [ ] **Export formats** - PDF, Word, plain text
-- [ ] **Audio player** - Built-in playback with waveform
-- [ ] **Cloud storage** - Direct integration with Google Drive/OneDrive
-- [x] **Multi-language** - Estonian and English support (completed)
-- [ ] **Additional languages** - French, German, etc.
-- [ ] **Templates** - Custom memo templates
+Check that the file:
 
-## ⚠️ Security & Privacy
-
-- **API keys** are stored locally as environment variables
-- **Audio files** are processed according to Google's privacy policy
-- **No data retention** - Files are not stored after processing
-- **Local processing** - Transcripts and memos saved locally
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 📊 Key Features Detailed
-
-### 🎤 Built-in Audio Recording
-- **One-click recording**: Start/stop with visual feedback
-- **Speech-optimized**: 22kHz mono recording perfect for meetings
-- **Efficient encoding**: Direct MP3 encoding with lameenc (no external tools needed)
-- **Auto-processing**: Automatically processes recorded audio when recording stops
-- **File size optimization**: ~1MB per minute vs ~10MB for standard recording
-
-### 📁 Organized File Management
-- **Auto-folder creation**: `recordings/` folder created automatically
-- **Timestamped naming**: `yymmdd-hhmmss-[type]` format for easy organization
-- **Session grouping**: All files from same recording session have matching timestamps
-- **Example**: `241113-143022-recording.mp3`, `241113-143022-transcript.txt`, `241113-143022-memo.md`
-
-### 📊 API Usage Tracking
-- **Real-time statistics** displayed in results area
-- **Token counts**: Input, output, and total tokens
-- **Processing time**: Detailed timing for each operation
-- **No log files**: All data shown directly in UI
-
-### 🛡️ File Validation
-- **Format checking**: Validates audio file extensions and MIME types
-- **Size limits**: Enforces minimum (1KB) and maximum (100MB) file sizes
-- **Integrity checks**: Basic corruption detection
-- **Clear error messages**: Specific validation failure details
-
-### 🔄 Real Progress Bar
-- **Step-by-step progress**: Shows actual processing stages
-- **Visual feedback**: Progress from 0.1 (start) to 1.0 (complete)
-- **Stays visible**: Progress remains visible for 2 seconds after completion
-
-## 🤝 Support
-
-- **Issues**: [GitHub Issues](https://github.com/priit2000/memomaker/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/priit2000/memomaker/discussions)
-
-## 🙏 Acknowledgments
-
-- **Google Gemini AI** - For powerful audio processing capabilities
-- **CustomTkinter** - For modern UI components
-- **Estonian language community** - For feedback and testing
-
----
-
-Made with ❤️ for efficient meeting documentation
+- matches `transcription-prompt-*.md`
+- has at least two top-level headings beginning with `# `
+- is saved as UTF-8
