@@ -72,18 +72,18 @@ Ajavahemik: [HH:MM:SS-HH:MM:SS]
 * <oluline punkt>
 
 ## Otsused
-* <otsus>: vastutaja: <nimi>. Viide: [HH:MM:SS]
-* <otsus>: vastutaja: <nimi>. Viide: [HH:MM:SS]
+* <otsus>: vastutaja: <nimi>.
+* <otsus>: vastutaja: <nimi>.
 
 ## Tegevused
-* <tegevus>: <nimi>, tähtaeg: <kuupäev>. Viide: [HH:MM:SS]
-* <tegevus>: <nimi>, tähtaeg: <kuupäev>. Viide: [HH:MM:SS]
+* <tegevus>: <nimi>, tähtaeg: <kuupäev>.
+* <tegevus>: <nimi>, tähtaeg: <kuupäev>.
 
 ## Küsimused
-* <küsimus>: <nimi>. Järgmine samm: <samm>. Viide: [HH:MM:SS]
+* <küsimus>: <nimi>. Järgmine samm: <samm>.
 
 ## Riskid ja takistused
-* <risk/takistus>. Mõju: <mõju>. Plaan: <plaan>. Viide: [HH:MM:SS]
+* <risk/takistus>. Mõju: <mõju>. Plaan: <plaan>.
 
 ## Järgmised kohtumised
 * <kuupäev kellaaeg>

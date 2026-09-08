@@ -97,6 +97,8 @@ recordings/
 # Keep important script files
 !transcription-prompt*.md
 !README.md
+!requirements.txt
+!ui/index.html
 
 # AI tools
 .aider*
