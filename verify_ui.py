@@ -2,6 +2,47 @@
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
+SIZES = [(1536, 1024), (1200, 800), (960, 720), (390, 844)]
+
+
+def check_controls(page, container, selectors):
+    """Check geometry inside a control group, even below the mobile fold."""
+    parent = page.locator(container).bounding_box()
+    boxes = []
+    for selector in selectors:
+        for control in page.locator(selector).all():
+            assert control.is_visible(), (selector, "hidden", page.viewport_size)
+            box = control.bounding_box()
+            assert box and box["width"] > 0 and box["height"] > 0, selector
+            assert box["x"] >= parent["x"] - 1 and box["y"] >= parent["y"] - 1, (selector, "outside", container)
+            assert box["x"] + box["width"] <= parent["x"] + parent["width"] + 1, (selector, "clipped horizontally", container)
+            assert box["y"] + box["height"] <= parent["y"] + parent["height"] + 1, (selector, "clipped vertically", container)
+            for other_selector, other in boxes:
+                overlap_x = min(box["x"] + box["width"], other["x"] + other["width"]) - max(box["x"], other["x"])
+                overlap_y = min(box["y"] + box["height"], other["y"] + other["height"]) - max(box["y"], other["y"])
+                assert overlap_x <= 1 or overlap_y <= 1, (selector, "overlaps", other_selector, page.viewport_size)
+            boxes.append((selector, box))
+
+
+def check_layout(page, speakers=False, progress=False):
+    for width, height in SIZES:
+        page.set_viewport_size({"width": width, "height": height})
+        assert page.evaluate("document.body.scrollWidth <= innerWidth"), (width, "horizontal overflow")
+        check_controls(page, "header", [".brand", "#settings-open"])
+        check_controls(page, ".workspace-toolbar", [".output-tabs button", ".output-actions button:not([hidden])"])
+        check_controls(page, ".setup", [".setup-scroll", "#generate"])
+        if width > 750:
+            box = page.locator("#generate").bounding_box()
+            assert box["y"] + box["height"] <= height, (width, "Generate below viewport")
+        if speakers:
+            check_controls(page, "#speakers-panel", ["#speakers-panel h2", "#speakers-close", ".speaker-row input", "#speaker-add", "#speakers-form button[type=submit]"])
+            check_controls(page, ".workspace", ["#speakers-panel", "#document"])
+        if progress:
+            check_controls(page, "footer", [".status-dot", "#status", "#job-progress", "#activity-toggle"])
+            check_controls(page, "#job-progress", ["#progress", "#progress-label", "#elapsed"])
+    page.set_viewport_size({"width": 1536, "height": 1024})
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(channel="msedge")
     page = browser.new_page(viewport={"width": 1536, "height": 1024})
@@ -10,13 +51,7 @@ with sync_playwright() as p:
     page.goto(Path("ui/index.html").resolve().as_uri() + "?example")
     page.evaluate("document.fonts.ready")
     page.screenshot(path="ui-reference-check.png")
-    for width, height in [(1536, 1024), (1200, 800), (960, 720), (390, 844)]:
-        page.set_viewport_size({"width": width, "height": height})
-        assert page.evaluate("document.body.scrollWidth <= innerWidth"), (width, "horizontal overflow")
-        if width > 750:
-            bounds = page.locator("#generate").bounding_box()
-            assert bounds["y"] + bounds["height"] < height, (width, "Generate hidden")
-    page.set_viewport_size({"width": 1536, "height": 1024})
+    check_layout(page)
     page.locator("#settings-open").click()
     assert page.locator("#settings").is_visible()
     page.locator(".stage select").first.select_option("OpenRouter")
@@ -64,6 +99,7 @@ with sync_playwright() as p:
     page.locator('#speakers-toggle').click()
     assert page.locator('#speakers-panel').is_visible()
     page.locator('.speaker-row').first.locator('input').nth(1).fill('Anna')
+    check_layout(page, speakers=True)
     page.screenshot(path='ui-speakers-check.png')
     page.locator('#speakers-form button[type=submit]').click()
     assert 'Anna met Speaker 10.' in page.locator('#preview').inner_text()
@@ -84,19 +120,19 @@ with sync_playwright() as p:
         return [clipboard.getData('text/plain'),clipboard.getData('text/html')];
     }""")
     assert selected[0] == 'Speaker 1' and '<strong>Speaker 1</strong>' in selected[1]
+    page.locator("#speakers-toggle").click()
     page.evaluate("busy(true); receive('progress',{completed:2,total:4,label:'Writing memo'})")
     assert page.locator('#progress').get_attribute('value') == '2'
     assert page.locator('#progress-label').inner_text() == '2/4 stages complete'
     assert page.locator('#elapsed').inner_text().endswith('elapsed')
     assert page.locator('#speakers-toggle').is_disabled()
-    for width, height in [(1536,1024),(960,720),(390,844)]:
-        page.set_viewport_size({'width':width,'height':height})
-        assert page.evaluate('document.body.scrollWidth <= innerWidth')
-    page.set_viewport_size({'width':1536,'height':1024})
+    assert page.locator("#speakers-panel").is_hidden()
+    check_layout(page, progress=True)
     page.screenshot(path='ui-workspace-check.png')
     page.evaluate("receive('done','Failed: Writing failed')")
     assert page.locator('#progress').get_attribute('value') == '2'
     assert 'failed' in page.locator('#job-progress').get_attribute('class')
+    check_layout(page, progress=True)
     page.evaluate("busy(true);receive('progress',{completed:4,total:4,label:'Completed'});receive('done','Completed')")
     assert page.locator('#progress').get_attribute('value') == '4'
     page.locator("#activity-toggle").click()

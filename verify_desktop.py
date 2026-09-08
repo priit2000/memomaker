@@ -13,7 +13,11 @@ api.initialize = lambda: {"settings": {}, "profiles": ["EN"], "profile": "EN",
 api._window = webview.create_window("MemoMaker QA", str(Path("ui/index.html").resolve()), js_api=api, width=1200, height=850)
 
 
+failures = []
+completed = False
+
 def check():
+    global completed
     try:
         import time
         time.sleep(1)
@@ -34,10 +38,18 @@ def check():
                 api._window.native.Invoke(Action(lambda: Clipboard.SetDataObject(previous[0], True)))
         api.emit("memo", "# Smoke test\n\nRendered output.")
         assert "Smoke test" in api._window.evaluate_js("document.getElementById('preview').textContent")
-        print("Desktop bridge, clipboard, and Markdown rendering passed.")
+        completed = True
+    except BaseException as error:
+        failures.append(error)
     finally:
         api._window.destroy()
 
 
 api._window.events.loaded += check
 webview.start(gui="edgechromium")
+
+if failures:
+    raise failures[0]
+if not completed:
+    raise RuntimeError("Desktop smoke check closed before completing")
+print("Desktop bridge, clipboard, and Markdown rendering passed.")

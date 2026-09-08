@@ -98,12 +98,16 @@ class ProviderTests(unittest.TestCase):
                 self.assertIn(b"sample-audio", request.call_args.kwargs["raw"])
                 self.assertIn("multipart/form-data", request.call_args.kwargs["content_type"])
 
-    def test_openrouter_filters_audio_models(self):
-        provider = ChatProvider("key", "https://openrouter.ai/api/v1")
-        rows = [{"id": "audio", "architecture": {"input_modalities": ["audio"], "output_modalities": ["text"]}},
-                {"id": "text", "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]}}]
-        with patch.object(provider, "request", return_value={"data": rows}):
-            self.assertEqual(provider.models(True), ["audio"])
+    def test_openrouter_factory_filters_merged_catalog_by_stage(self):
+        provider = create_provider("OpenRouter", {"OPENROUTER_API_KEY": "key"})
+        self.assertIsInstance(provider, OpenRouterProvider)
+        rows = [
+            {"id": "audio", "architecture": {"input_modalities": ["audio", "text"], "output_modalities": ["text"]}},
+            {"id": "text", "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]}},
+        ]
+        specialists = [{"id": "stt", "architecture": {"input_modalities": ["audio"], "output_modalities": ["transcription"]}}]
+        with patch.object(provider, "request", side_effect=[{"data": rows}, {"data": specialists}]):
+            self.assertEqual(provider.models(True), ["audio", "stt"])
             self.assertEqual(provider.models(False), ["audio", "text"])
 
     def test_empty_response_rejected(self):

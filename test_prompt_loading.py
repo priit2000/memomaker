@@ -1,7 +1,5 @@
 import importlib.util
 import pathlib
-import sys
-import types
 import unittest
 
 
@@ -9,12 +7,6 @@ def load_memomaker_module():
     root = pathlib.Path(__file__).resolve().parent
     module_path = root / "memomaker-ui.pyw"
 
-    sys.modules.setdefault("customtkinter", types.SimpleNamespace(CTk=object))
-    sys.modules.setdefault("google", types.ModuleType("google"))
-    sys.modules.setdefault(
-        "google.generativeai",
-        types.SimpleNamespace(configure=lambda **kwargs: None),
-    )
     spec = importlib.util.spec_from_file_location("memomaker_ui", module_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
