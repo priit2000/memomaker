@@ -148,7 +148,7 @@ class DesktopAPI:
     def emit(self, kind, value):
         self._window.evaluate_js("window.receive(%s,%s)" % (json.dumps(kind), json.dumps(value)))
 
-    def generate(self, stages, prompts, method, transcript=None):
+    def generate(self, stages, prompts, method, transcript=None, transcript_only=False):
         if transcript is None and not self._path:
             return {"error": "Select an audio file first."}
         if not self._lock.acquire(blocking=False):
@@ -156,7 +156,7 @@ class DesktopAPI:
         path, settings = self._path, dict(self._settings)
         def work():
             try:
-                run_pipeline(self._core, path, stages, settings, prompts, method, self.emit, transcript)
+                run_pipeline(self._core, path, stages, settings, prompts, method, self.emit, transcript, transcript_only)
                 self.emit("done", "Completed")
             except Exception as exc:
                 self.emit("done", "Failed: " + str(exc))

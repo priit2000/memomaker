@@ -9,9 +9,12 @@ from providers import PROVIDERS, KEY_NAMES, create_provider
 CONFIG = Path(os.environ.get("APPDATA", str(Path.home()))) / "MemoMaker" / "settings.json"
 
 
-def run_pipeline(core, path, selections, settings, prompts, method, emit, transcript=None):
+def run_pipeline(core, path, selections, settings, prompts, method, emit, transcript=None, transcript_only=False):
+    if transcript_only and transcript is not None:
+        raise ValueError("Transcript-only processing requires an audio file.")
     first_stage = 1 if transcript is not None else 0
-    total = 4 - first_stage
+    last_stage = 1 if transcript_only else 2
+    total = 3 if transcript_only else 4 - first_stage
     def progress(completed, label):
         emit("progress", {"completed": completed, "total": total, "label": label})
     progress(0, "Validating inputs and models")
@@ -21,16 +24,16 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
             raise ValueError(reason)
     elif not transcript.strip():
         raise ValueError("Load a nonempty transcript first.")
-    for prompt in prompts[first_stage:]:
+    for prompt in prompts[first_stage:last_stage]:
         valid, reason = core.validate_prompt_input(prompt)
         if not valid:
             raise ValueError(reason)
     # Validate both configurations before making a billable request.
     providers = {}
-    for index in range(first_stage, 2):
+    for index in range(first_stage, last_stage):
         name, model = selections[index]
         if not model.strip():
-            raise ValueError("Select a model for both stages.")
+            raise ValueError("Select a model for each required stage.")
         provider = create_provider(name, settings)
         if name == "OpenRouter":
             provider.validate_model(model, index == 0)
@@ -45,13 +48,15 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
         (folder / (stamp + "-transcript.txt")).write_text(transcript, encoding="utf-8")
         emit("transcript", transcript)
     for index, (name, model) in enumerate(selections):
-        if index < first_stage:
+        if index < first_stage or index >= last_stage:
             continue
         emit("status", "Transcribing audio..." if index == 0 else "Writing output...")
         provider = providers[index]
         if index == 0:
             text, usage = provider.transcribe(model, path, prompts[0], method)
             transcript = text
+            if transcript_only:
+                progress(2, "Saving transcript")
         else:
             text, usage = provider.generate(model, transcript, prompts[1])
             progress(total - 1, "Saving memo")
@@ -59,7 +64,7 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
         target.write_text(text, encoding="utf-8")
         emit("transcript" if index == 0 else "memo", text)
         emit("log", "%s / %s | %s | Saved %s" % (name, model, json.dumps(usage), target.name))
-        if index == 0:
+        if index == 0 and not transcript_only:
             progress(2, "Writing memo")
     progress(total, "Completed")
 

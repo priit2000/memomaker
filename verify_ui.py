@@ -56,6 +56,13 @@ with sync_playwright() as p:
     assert page.locator("#settings").is_visible()
     page.locator(".stage select").first.select_option("OpenRouter")
     assert page.locator(".stage input").first.input_value() == ""
+    page.locator('.stage input').first.fill('microsoft/mai-transcribe-2')
+    assert '15 minutes' in page.locator('.stage .audio-limits').inner_text()
+    page.locator('.stage input').first.fill('openai/whisper-1')
+    assert '25 MB audio-file limit' in page.locator('.stage .audio-limits').inner_text()
+    page.locator('.stage input').first.fill('unlisted-model')
+    assert 'not in the checked audio catalog' in page.locator('.stage .audio-limits').inner_text()
+    assert page.evaluate("Object.keys(audioModelCatalog).every(m => audioLimits('OpenRouter',m).notes.length >= 2)")
     page.locator("#settings-close").click()
     assert page.locator("[data-method='inline']").get_attribute("class") == "active"
     page.evaluate("""window.calls=[];window.pywebview={api:{
@@ -71,8 +78,13 @@ with sync_playwright() as p:
     assert page.locator("#source").input_value() == "transcript"
     assert page.locator("#methods").is_hidden()
     page.locator("#generate").click()
-    assert page.evaluate("calls.at(-1).slice(-2)") == ["inline", "Loaded transcript"]
+    assert page.evaluate("calls.at(-1).slice(-3)") == ["inline", "Loaded transcript", False]
     assert page.locator("#load-output").is_disabled()
+    page.evaluate("receive('done','Completed')")
+    page.locator("#source").select_option("transcript-only")
+    assert page.locator("#generate").inner_text() == "Generate transcript"
+    page.locator("#generate").click()
+    assert page.evaluate("calls.at(-1).slice(-3)") == ["inline", None, True]
     page.evaluate("receive('done','Completed')")
     page.locator("[data-output='memo']").click()
     page.locator("#load-output").click()

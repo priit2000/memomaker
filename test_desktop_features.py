@@ -9,6 +9,27 @@ from test_prompt_loading import load_memomaker_module
 
 
 class DesktopFeaturesTests(unittest.TestCase):
+    def test_transcript_only_skips_writing_configuration_and_request(self):
+        from workspace_ui import run_pipeline
+        with tempfile.TemporaryDirectory() as directory:
+            core = SimpleNamespace(OUTPUT_FOLDER=directory,
+                                   validate_audio_file=Mock(return_value=(True, "")),
+                                   validate_prompt_input=Mock(return_value=(True, "")))
+            provider = Mock()
+            provider.transcribe.return_value = ("Audio transcript", {})
+            events = []
+            with patch("workspace_ui.create_provider", return_value=provider) as factory:
+                run_pipeline(core, "audio.mp3", [("Custom API", "transcriber"), ("Google Gemini", "")],
+                             {}, ["Transcribe", ""], "inline", lambda k, v: events.append((k, v)),
+                             transcript_only=True)
+            factory.assert_called_once_with("Custom API", {})
+            core.validate_prompt_input.assert_called_once_with("Transcribe")
+            provider.generate.assert_not_called()
+            self.assertEqual(next(Path(directory).glob("*-transcript.txt")).read_text(), "Audio transcript")
+            self.assertEqual(list(Path(directory).glob("*-memo.md")), [])
+            self.assertFalse(any(k == "memo" for k, v in events))
+            self.assertEqual(events[-1], ("progress", {"completed": 3, "total": 3, "label": "Completed"}))
+
     def test_rich_clipboard_offsets_count_utf8_bytes(self):
         fragment = '<div><h1>Memo</h1><p><b>J\u00fcri</b> &amp; Liis</p></div>'
         payload = clipboard_html(fragment).encode('utf-8')

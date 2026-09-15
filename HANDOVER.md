@@ -1,20 +1,20 @@
 # MemoMaker Handover
 
-State recorded on 2026-09-08. This is a working-tree handover, not a release note. Read AGENTS.md and README.md before making changes, then inspect the current Git diff: the working tree is the source of truth.
+State recorded on 2026-09-15. This is a working-tree handover, not a release note. Read AGENTS.md and README.md before making changes, then inspect the current Git diff: the working tree is the source of truth.
 
 ## Start Here
 
 The repository is at `C:\Users\priit\OneDrive\projektid\amperly\ai-tools-coding-chatgpt\memomaker`. Use PowerShell 5.1-compatible commands and run the app from this directory because prompt discovery and output paths depend on the current working directory.
 
-The current branch is `master`. HEAD is `04a8a28` (`Remove recording UI and support prompt profiles`). The provider expansion, desktop UI rebuild, and subsequent features described below are uncommitted. No commit or push was performed for those changes.
+The current branch is `master`. The latest user request authorizes updating this handover and pushing the session changes to `origin`. Use `git log -1` and `git status` for the actual commit and push state.
 
-The latest user request was to add this handover. There is no authorized new application feature pending. Previously mentioned improvement ideas are proposals only.
+No further application feature is pending. Generated outputs, audio, and QA screenshots remain local and must not be staged.
 
 ## User Expectations
 
 The user expects close visual fidelity to the supplied light MemoMaker reference, not a loose restyling. Preserve the white workspace, restrained teal accents, two-panel composition, underline tabs, document preview, and slim status footer. Functional controls may differ from the reference.
 
-The user requested subagents for all tasks. No subagent tools were available during this work; this was disclosed, and implementation continued directly. Use real subagents when available. Do not substitute unrelated user-visible tasks or claim delegation that did not happen.
+Follow current session instructions on delegation. Historical requests do not override the current restriction against unsolicited subagents.
 
 The user explicitly requested that CLAUDE.md be an exact copy of AGENTS.md. That copy was made and verified with matching SHA-256 hashes. Keep them synchronized when changing shared guidance. CLAUDE.md is currently gitignored.
 
@@ -31,6 +31,7 @@ The application no longer uses the previous CustomTkinter workspace. The desktop
 | `workspace_ui.py` | Shared pipeline, CLI, settings location |
 | `desktop_view.py` | Desktop bridge, dialogs, clipboard, loading, prompt saving |
 | `ui/index.html`, `ui/style.css`, `ui/app.js` | Main interface and state |
+| `ui/audio-limits.js` | Checked audio-model catalog, limit guidance and source links |
 | `ui/workspace-tools.js` | Speaker editing, Undo, stage progress, rich copying |
 | `requirements.txt` | Runtime Python dependencies |
 
@@ -48,7 +49,7 @@ Custom APIs support chat audio or multipart transcription requests and chat-comp
 
 ### Saved Work and Prompts
 
-The folder icon loads a `.txt` or `.md` file into the active Transcript or Memo tab. Loading a transcript selects Workspace transcript as the processing source. Generation then skips audio and transcription credentials and uses only the writing model. Selecting Audio file restores the audio path.
+The folder icon loads a `.txt` or `.md` file into the active Transcript or Memo tab. Loading a transcript selects Existing transcript to memo as the processing mode. Generation then skips audio and transcription credentials and uses only the writing model. The other modes are Audio to transcript and memo, and Audio to transcript only. Transcript-only skips writing prompt/model/key validation and never calls the writing provider. These choices are GUI controls; CLI behavior is unchanged.
 
 Generation saves timestamped transcript and memo files under `outputs/`. The transcript survives writing failure. Reusing a loaded transcript saves a new transcript copy alongside the memo. Loaded source files are not overwritten automatically.
 
@@ -58,21 +59,21 @@ All `transcription-prompt-*.md` profiles are discovered using the full filename 
 
 Speakers opens a right-panel name editor with detected labels and manual replacement rows. Apply performs case-sensitive, boundary-aware replacements in both workspace documents in one pass. It supports name swaps without cascading replacements and provides Undo for the latest rename. It does not infer identities or regenerate prose. Export each changed document to persist it.
 
-Progress events carry completed stage count, total stages, and a label. Audio processing has four stages: validation, transcription, writing, and saving. Transcript reuse has three. The footer also shows elapsed time. Progress does not advance artificially while waiting for a provider and remains incomplete on failure.
+Progress events carry completed stage count, total stages, and a label. Audio processing has four stages: validation, transcription, writing, and saving. Transcript reuse and transcript-only processing each have three. The footer also shows elapsed time. Progress does not advance artificially while waiting for a provider and remains incomplete on failure.
 
 Copy writes Windows CF_HTML and Unicode plain text. UTF-8 byte offsets are generated by `clipboard_html()` in `desktop_view.py`. Rich preview selections also retain HTML on Ctrl+C, including ancestor formatting. Raw-editor copying remains source text. Destination applications determine final paste appearance.
 
 ## Verification Already Performed
 
-The following checks passed after the latest application changes. Subsequent changes were documentation-only. These results are historical; rerun after implementation changes.
+Unit and browser checks passed on 2026-09-15. Native desktop and compilation checks listed below are historical from the earlier implementation; they were not repeated for this session.
 
-- `python -m unittest discover -v`: 21 tests passed.
+- `python -m unittest discover -v`: 22 tests passed, including transcript-only stage isolation.
 - `python verify_ui.py`: responsive layouts, saved-file loading, transcript reuse, prompt saving, speaker replacement/Undo, rich copy and selection, progress/failure, and existing workspace controls passed.
 - `python verify_desktop.py`: native desktop bridge, HTML/Unicode clipboard content, and Markdown rendering passed. The test restores prior clipboard content when available.
 - Python compilation passed for the entry point and backend modules.
 - A read-only query against the live OpenRouter catalog confirmed MAI-Transcribe 2 appears in transcription models and not writing models.
 
-No paid transcription or memo-generation request was made to verify the new specialist path. Mock tests and catalog checks do not prove end-to-end behavior for all models. Rich clipboard formats were inspected natively; pasting into every third-party editor was not tested.
+Live MAI diagnostic requests were made: a one-second synthetic WAV returned provider HTTP 429; the recently opened 69-minute, 33.2 MB MP3 reproduced HTTP 400 with “The selected model does not support large audio inputs”. No successful live transcription was established. Mock tests and catalog checks do not prove end-to-end behavior for all models. Rich clipboard formats were inspected natively; pasting into every third-party editor was not tested.
 
 The local environment has pywebview and Python Playwright installed. Browser QA uses installed Microsoft Edge via `channel="msedge"`; bundled Playwright Chromium was not required.
 
@@ -90,15 +91,25 @@ The desktop smoke test opens and closes a temporary window. It does not call pai
 
 ## Git and Data Safety
 
-At handover, tracked modifications include `.gitignore`, README.md, `memomaker-ui.pyw`, and the English and Estonian prompt files. New backend modules, UI assets, requirements, tests, agent guidance, and QA scripts are untracked. `transcription-prompt-et-article.md` is also untracked. Review individual diffs and ownership before staging anything.
-
-The prompt edits predate or occurred during the work and include user changes. Documentation updates did not edit prompt content. Preserve those changes rather than replacing them with older versions.
+The session changes include processing modes, provider error details, selectable Activity log text, audio-limit guidance, tests, and the Estonian memo prompt. The user authorized committing and pushing these changes. The Estonian memo rules now require no timestamps, no repeated substantive points, grounded attribution, and blank missing fields; its transcription section was preserved.
 
 `outputs/` contains many existing generated memos and other user documents and is currently not ignored. The three QA screenshots are also untracked and not ignored. Do not run `git add .` blindly.
 
 The user asked which files should be ignored; the answer recommended ignoring `/outputs/`, generated QA screenshots, and `.env.*` while retaining `.env.example`. Those ignore additions have not been implemented. Existing broad `*.txt` and `*.html` rules have exceptions for `requirements.txt` and `ui/index.html`. CLAUDE.md remains ignored. Do not assume ignore policy has already been fixed.
 
 Keep application source, tests, prompt profiles, runtime assets, and third-party licenses versioned. Generated documents, private audio, credentials, and QA screenshots are not application source. This handover contains no API keys.
+
+## Audio Limits and Error Diagnosis
+
+Audio limits appear beneath the transcription model in API settings and in the expandable Audio limits panel under Processing. The panel updates with the selected provider, model, and Google method, and hides for existing-transcript memo generation. Activity log text supports selection and Ctrl+C; no Copy button was added.
+
+`ui/audio-limits.js` contains a snapshot of all 66 OpenRouter audio-capable models checked on 2026-09-15. All endpoint records were checked; none exposed numeric audio-size or duration fields. Unknown values remain explicitly unpublished, never unlimited. New models receive an unlisted-catalog notice; refreshing model discovery does not update this static snapshot. Source links and the checked date accompany guidance.
+
+Known guidance includes Whisper 1's published 25 MB file limit, original Voxtral models' 30-minute transcription capability, and MAI-Transcribe-2 speaker-identification failures around 15 minutes and longer. The reproduced 33.2 MB MAI rejection is an observation, not an exact size threshold. OpenRouter's 25 MB multipart cap must not be presented as the base64 JSON limit used here. Its documented 60-second upstream timeout is processing time, not recording duration.
+
+Google documentation conflicts on inline request size (20 MB in the audio guide versus 100 MB in newer file guidance). The UI exposes this conflict, the 2 GB Files API limit, and the 9.5-hour audio guide duration. MemoMaker still caps files at 100 MiB and Auto switches at 20 MiB. Guidance is informational; no new duration detection, chunking, or model-specific blocking was added. Custom-server limits are unknown.
+
+`ChatProvider` now retains bounded structured provider error messages, endpoint paths, and nested metadata error messages instead of replacing every HTTP failure with generic advice. It redacts the configured key and common bearer/key patterns. Unstructured bodies retain a generic fallback. The original failure was reproduced; successful end-to-end operation for every model is not verified.
 
 ## Known Limitations
 
@@ -117,6 +128,19 @@ Prompt discovery happens at startup in the current working directory. Loaded tex
 ## Possible Follow-Ups
 
 The user asked for improvement ideas. Automatic workspace recovery, audio playback linked to timestamps, and one-click retry of a failed writing stage were suggested but not implemented or separately authorized. Repository ignore cleanup was discussed but not requested for implementation. Confirm the next task's scope instead of treating this list as a backlog to execute automatically.
+
+## Test Cleanup: Garbage Tests
+
+Historical review notes follow. Commit `c84a102` subsequently fixed provider tests and strengthened UI verification failures; inspect current code before treating these findings as unresolved.
+
+After the initial handover, the user asked whether there were garbage tests. The following findings were reported from previously inspected test code, without a fresh execution-based audit. They have not been fixed. The request here was to document them, not to delete or rewrite tests.
+
+- **Obsolete OpenRouter coverage:** `test_openrouter_filters_audio_models` in `test_providers.py` tests filtering on `ChatProvider`, whereas the application's OpenRouter path now uses `OpenRouterProvider`. Remove or replace this misleading legacy test; retain the newer specialist discovery and routing tests.
+- **Global test pollution:** `load_memomaker_module()` in `test_prompt_loading.py` inserts Google and CustomTkinter stubs into `sys.modules` without restoring them. This can hide dependency issues and make behavior order-dependent. Scope and restore mocks, and remove obsolete CustomTkinter scaffolding.
+- **Potential false-positive desktop smoke check:** Assertions in `verify_desktop.py` run inside a window callback. A callback exception may close the window without producing a failing process exit code. Verify this by deliberately failing an assertion, then propagate callback failures to the main thread or explicitly return a nonzero exit status. This failure mode has not yet been reproduced.
+- **Weak layout assertions:** `verify_ui.py` checks page overflow and some control visibility, but those checks do not establish that controls never overlap or clip internally. Add focused bounding-box checks for important controls and verify speaker-panel and progress states across supported sizes.
+
+The specialist-routing, transcript-reuse, prompt-save cancellation, clipboard-offset, and speaker-replacement tests remain useful. Do not treat this review as a reason to remove the test suite. Historical passing counts above describe completed runs, not proof that the test harness itself is free of these weaknesses.
 
 ## Visual References
 

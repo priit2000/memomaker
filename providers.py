@@ -3,6 +3,7 @@ import base64
 import json
 import mimetypes
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -19,6 +20,27 @@ class ChatProvider:
         self.base_url = base_url.rstrip("/")
         self.audio_mode = audio_mode
 
+    def error_detail(self, result):
+        error = result.get("error", {}) if isinstance(result, dict) else {}
+        message = error.get("message", "") if isinstance(error, dict) else error
+        metadata = error.get("metadata", {}) if isinstance(error, dict) else {}
+        raw = metadata.get("raw", "") if isinstance(metadata, dict) else ""
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except ValueError:
+                raw = {}
+        if isinstance(raw, dict):
+            nested = raw.get("error", raw)
+            detail = nested.get("message", "") if isinstance(nested, dict) else ""
+            if detail and detail != message:
+                message = str(message) + ": " + str(detail)
+        message = str(message)
+        if self.key:
+            message = message.replace(self.key, "[REDACTED]")
+        message = re.sub(r"(?i)Bearer\s+\S+|sk-[A-Za-z0-9_-]+", "[REDACTED]", message)
+        return " ".join(message.split())[:1000]
+
     def request(self, route, payload=None, raw=None, content_type=None):
         headers = {"Accept": "application/json"}
         if self.key:
@@ -34,11 +56,16 @@ class ChatProvider:
             with urllib.request.urlopen(request, timeout=180) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as exc:
-            raise ProviderError("API request failed (HTTP %s). Check credentials, model access, audio format and request limits." % exc.code) from exc
+            try:
+                detail = self.error_detail(json.loads(exc.read(65536)))
+            except (OSError, ValueError):
+                detail = ""
+            raise ProviderError("API request failed (HTTP %s) at %s: %s" %
+                                (exc.code, route, detail or "Provider returned no readable error message.")) from exc
         except (OSError, ValueError) as exc:
             raise ProviderError("API connection failed or returned invalid JSON.") from exc
         if "error" in result:
-            raise ProviderError("Provider returned an error. Check model availability and account credits.")
+            raise ProviderError("Provider returned an error: " + (self.error_detail(result) or "No explanation provided."))
         return result
 
     def models(self, audio=False):
