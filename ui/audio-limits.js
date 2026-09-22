@@ -219,7 +219,7 @@ function audioLimits(provider, model, method='inline') {
    add('OpenRouter audio documentation','https://openrouter.ai/docs/guides/overview/multimodal/audio');
   }
   if(model==='microsoft/mai-transcribe-2') {
-   notes.push('Speaker identification is enabled. Microsoft reports failures for recordings about 15 minutes or longer. A 33.2 MB file was rejected through OpenRouter; the exact size cutoff is undisclosed.');
+   notes.push('Speaker identification: keep recordings under 15 minutes. Longer recordings can fail.');
    add('Microsoft recording-length restriction','https://learn.microsoft.com/en-us/azure/ai-services/speech-service/mai-transcribe');
   }
   if(model==='openai/whisper-1') {

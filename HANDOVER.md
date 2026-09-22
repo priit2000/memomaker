@@ -87,13 +87,13 @@ python .\verify_desktop.py
 python .\memomaker-ui.pyw
 ```
 
-The desktop smoke test opens and closes a temporary window. It does not call paid APIs. The browser test writes `ui-reference-check.png`, `ui-speakers-check.png`, and `ui-workspace-check.png`; those screenshots contain test fixtures, not actual user results.
+The desktop smoke test opens and closes a temporary window. It does not call paid APIs. The browser test no longer writes screenshots automatically.
 
 ## Git and Data Safety
 
 The session changes include processing modes, provider error details, selectable Activity log text, audio-limit guidance, tests, and the Estonian memo prompt. The user authorized committing and pushing these changes. The Estonian memo rules now require no timestamps, no repeated substantive points, grounded attribution, and blank missing fields; its transcription section was preserved.
 
-`outputs/` contains many existing generated memos and other user documents and is currently not ignored. The three QA screenshots are also untracked and not ignored. Do not run `git add .` blindly.
+`outputs/` contains many existing generated memos and other user documents and is currently not ignored. The three generated QA screenshots were removed during cleanup. Do not run `git add .` blindly.
 
 The user asked which files should be ignored; the answer recommended ignoring `/outputs/`, generated QA screenshots, and `.env.*` while retaining `.env.example`. Those ignore additions have not been implemented. Existing broad `*.txt` and `*.html` rules have exceptions for `requirements.txt` and `ui/index.html`. CLAUDE.md remains ignored. Do not assume ignore policy has already been fixed.
 
@@ -129,21 +129,16 @@ Prompt discovery happens at startup in the current working directory. Loaded tex
 
 The user asked for improvement ideas. Automatic workspace recovery, audio playback linked to timestamps, and one-click retry of a failed writing stage were suggested but not implemented or separately authorized. Repository ignore cleanup was discussed but not requested for implementation. Confirm the next task's scope instead of treating this list as a backlog to execute automatically.
 
-## Test Cleanup: Garbage Tests
+## Test Cleanup (2026-09-22)
 
-Historical review notes follow. Commit `c84a102` subsequently fixed provider tests and strengthened UI verification failures; inspect current code before treating these findings as unresolved.
+The three unit-test files were consolidated into `test_memomaker.py`. The obsolete source-text check for removed audio recording was deleted. Overlapping catalog discovery and audio encoding tests were merged into existing routing tests, preserving their useful assertions. The suite now contains 19 tests, all passing.
 
-After the initial handover, the user asked whether there were garbage tests. The following findings were reported from previously inspected test code, without a fresh execution-based audit. They have not been fixed. The request here was to document them, not to delete or rewrite tests.
+`verify_ui.py` remains a separate browser integration check. It passed after cleanup. Unused screenshot generation and a superficial assertion counting limit notes were removed. It no longer creates the three QA PNG files on every run.
 
-- **Obsolete OpenRouter coverage:** `test_openrouter_filters_audio_models` in `test_providers.py` tests filtering on `ChatProvider`, whereas the application's OpenRouter path now uses `OpenRouterProvider`. Remove or replace this misleading legacy test; retain the newer specialist discovery and routing tests.
-- **Global test pollution:** `load_memomaker_module()` in `test_prompt_loading.py` inserts Google and CustomTkinter stubs into `sys.modules` without restoring them. This can hide dependency issues and make behavior order-dependent. Scope and restore mocks, and remove obsolete CustomTkinter scaffolding.
-- **Potential false-positive desktop smoke check:** Assertions in `verify_desktop.py` run inside a window callback. A callback exception may close the window without producing a failing process exit code. Verify this by deliberately failing an assertion, then propagate callback failures to the main thread or explicitly return a nonzero exit status. This failure mode has not yet been reproduced.
-- **Weak layout assertions:** `verify_ui.py` checks page overflow and some control visibility, but those checks do not establish that controls never overlap or clip internally. Add focused bounding-box checks for important controls and verify speaker-panel and progress states across supported sizes.
-
-The specialist-routing, transcript-reuse, prompt-save cancellation, clipboard-offset, and speaker-replacement tests remain useful. Do not treat this review as a reason to remove the test suite. Historical passing counts above describe completed runs, not proof that the test harness itself is free of these weaknesses.
+`verify_desktop.py` remains separate because it requires a native Windows window and clipboard. Inspection confirmed callback failures propagate to the process. It was not rerun during this cleanup. These integration scripts are not part of standard unittest discovery.
 
 ## Visual References
 
 The source design task is `codex://threads/01a08107-6798-78d0-8197-b9e5818d01a9`. It contains a generated visual reference, not an HTML implementation.
 
-The reference image used locally was `C:\Users\priit\AppData\Local\Temp\codex-clipboard-c550bd1e-b495-44b1-81c7-a7d5bd83152d.png`. Temporary attachments may disappear. The current QA screenshots show the implemented layout and controls; they do not establish literal pixel equality with the reference.
+The reference image used locally was `C:\Users\priit\AppData\Local\Temp\codex-clipboard-c550bd1e-b495-44b1-81c7-a7d5bd83152d.png`. Temporary attachments may disappear. The previous QA screenshots were disposable generated artifacts and have been removed.

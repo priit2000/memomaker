@@ -188,9 +188,7 @@ memomaker/
   transcription-prompt-et.md
   transcription-prompt-en.md
   transcription-prompt-en-article.md
-  test_prompt_loading.py
-  test_providers.py
-  test_desktop_features.py
+  test_memomaker.py
   verify_ui.py
   verify_desktop.py
   outputs/

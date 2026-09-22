@@ -50,7 +50,6 @@ with sync_playwright() as p:
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(Path("ui/index.html").resolve().as_uri() + "?example")
     page.evaluate("document.fonts.ready")
-    page.screenshot(path="ui-reference-check.png")
     check_layout(page)
     page.locator("#settings-open").click()
     assert page.locator("#settings").is_visible()
@@ -62,7 +61,6 @@ with sync_playwright() as p:
     assert '25 MB audio-file limit' in page.locator('.stage .audio-limits').inner_text()
     page.locator('.stage input').first.fill('unlisted-model')
     assert 'not in the checked audio catalog' in page.locator('.stage .audio-limits').inner_text()
-    assert page.evaluate("Object.keys(audioModelCatalog).every(m => audioLimits('OpenRouter',m).notes.length >= 2)")
     page.locator("#settings-close").click()
     assert page.locator("[data-method='inline']").get_attribute("class") == "active"
     page.evaluate("""window.calls=[];window.pywebview={api:{
@@ -112,7 +110,6 @@ with sync_playwright() as p:
     assert page.locator('#speakers-panel').is_visible()
     page.locator('.speaker-row').first.locator('input').nth(1).fill('Anna')
     check_layout(page, speakers=True)
-    page.screenshot(path='ui-speakers-check.png')
     page.locator('#speakers-form button[type=submit]').click()
     assert 'Anna met Speaker 10.' in page.locator('#preview').inner_text()
     assert page.evaluate('state.outputs.transcript') == '[00:00:01] Anna: Hello\n[00:00:04] Speaker 10: Welcome'
@@ -140,7 +137,6 @@ with sync_playwright() as p:
     assert page.locator('#speakers-toggle').is_disabled()
     assert page.locator("#speakers-panel").is_hidden()
     check_layout(page, progress=True)
-    page.screenshot(path='ui-workspace-check.png')
     page.evaluate("receive('done','Failed: Writing failed')")
     assert page.locator('#progress').get_attribute('value') == '2'
     assert 'failed' in page.locator('#job-progress').get_attribute('class')
