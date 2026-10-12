@@ -63,7 +63,7 @@ def detect_available_languages():
 
 # Detect available languages
 AVAILABLE_LANGUAGES = detect_available_languages()
-DEFAULT_LANGUAGE = list(AVAILABLE_LANGUAGES.keys())[0] if AVAILABLE_LANGUAGES else None
+DEFAULT_LANGUAGE = "EN" if "EN" in AVAILABLE_LANGUAGES else (sorted(AVAILABLE_LANGUAGES)[0] if AVAILABLE_LANGUAGES else None)
 
 # File validation functions
 def validate_audio_file(file_path):

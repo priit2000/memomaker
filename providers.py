@@ -14,6 +14,14 @@ class ProviderError(RuntimeError):
     pass
 
 
+class TruncatedOutput(ProviderError):
+    """The model stopped at its output limit; the partial text is kept so it can be saved."""
+    def __init__(self, text, usage):
+        super().__init__("Model output was cut off at the model's output limit.")
+        self.text = text
+        self.usage = usage
+
+
 class ChatProvider:
     def __init__(self, key, base_url, audio_mode="chat"):
         self.key = key
@@ -53,7 +61,7 @@ class ChatProvider:
             headers["Content-Type"] = content_type
         request = urllib.request.Request(self.base_url + route, data=body, headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=180) as response:
+            with urllib.request.urlopen(request) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as exc:
             try:
@@ -78,13 +86,16 @@ class ChatProvider:
     def completion(self, model, content):
         result = self.request("/chat/completions", {"model": model, "messages": [{"role": "user", "content": content}]})
         try:
-            text = result["choices"][0]["message"]["content"]
+            choice = result["choices"][0]
+            text = choice["message"]["content"]
             if isinstance(text, list):
                 text = "\n".join(p.get("text", "") for p in text)
             if not text or not text.strip():
                 raise ValueError()
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise ProviderError("Model returned no text.") from exc
+        if choice.get("finish_reason") == "length":
+            raise TruncatedOutput(text, result.get("usage", {}))
         return text, result.get("usage", {})
 
     def transcribe(self, model, path, prompt, method="inline"):
@@ -174,47 +185,50 @@ class OpenRouterProvider(ChatProvider):
 
 class GoogleProvider:
     def __init__(self, key):
-        import google.generativeai as genai
-        self.api = genai
-        self.api.configure(api_key=key)
+        from google import genai
+        from google.genai import types
+        self.client = genai.Client(api_key=key)
+        self.types = types
 
     def models(self, audio=False):
-        return sorted(m.name.split("/", 1)[-1] for m in self.api.list_models()
-                      if "generateContent" in m.supported_generation_methods)
+        return sorted(m.name.split("/", 1)[-1] for m in self.client.models.list()
+                      if "generateContent" in (m.supported_actions or []))
 
     def result(self, response):
-        text = response.text
+        text = response.text or ""
         if not text.strip():
             raise ProviderError("Google returned no text.")
         usage = getattr(response, "usage_metadata", None)
-        return text, {"prompt_tokens": getattr(usage, "prompt_token_count", None), "completion_tokens": getattr(usage, "candidates_token_count", None)}
+        usage = {"prompt_tokens": getattr(usage, "prompt_token_count", None), "completion_tokens": getattr(usage, "candidates_token_count", None)}
+        reason = getattr(response.candidates[0], "finish_reason", None) if response.candidates else None
+        if getattr(reason, "name", reason) == "MAX_TOKENS":
+            raise TruncatedOutput(text, usage)
+        return text, usage
 
     def transcribe(self, model, path, prompt, method="inline"):
         uploaded = None
         try:
             if method == "upload" or (method == "auto" and os.path.getsize(path) >= 20 * 1024 * 1024):
-                uploaded = self.api.upload_file(path=path)
-                deadline = time.monotonic() + 180
+                uploaded = self.client.files.upload(file=path)
                 while uploaded.state.name == "PROCESSING":
-                    if time.monotonic() > deadline:
-                        raise ProviderError("Google file processing timed out.")
                     time.sleep(1)
-                    uploaded = self.api.get_file(uploaded.name)
+                    uploaded = self.client.files.get(name=uploaded.name)
                 if uploaded.state.name == "FAILED":
                     raise ProviderError("Google could not process this file.")
                 content = uploaded
             else:
-                content = {"mime_type": mimetypes.guess_type(path)[0] or "application/octet-stream", "data": Path(path).read_bytes()}
-            return self.result(self.api.GenerativeModel(model).generate_content([prompt, content]))
+                content = self.types.Part.from_bytes(data=Path(path).read_bytes(),
+                                                     mime_type=mimetypes.guess_type(path)[0] or "application/octet-stream")
+            return self.result(self.client.models.generate_content(model=model, contents=[prompt, content]))
         finally:
             if uploaded:
                 try:
-                    self.api.delete_file(uploaded.name)
+                    self.client.files.delete(name=uploaded.name)
                 except Exception:
                     pass
 
     def generate(self, model, transcript, prompt):
-        return self.result(self.api.GenerativeModel(model).generate_content([prompt, transcript]))
+        return self.result(self.client.models.generate_content(model=model, contents=[prompt, transcript]))
 
 
 PROVIDERS = ("Google Gemini", "OpenRouter", "Custom API")

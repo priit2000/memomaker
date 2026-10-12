@@ -4,7 +4,7 @@ import json
 import os
 import time
 from pathlib import Path
-from providers import PROVIDERS, KEY_NAMES, create_provider
+from providers import PROVIDERS, KEY_NAMES, ProviderError, TruncatedOutput, create_provider
 
 CONFIG = Path(os.environ.get("APPDATA", str(Path.home()))) / "MemoMaker" / "settings.json"
 
@@ -52,18 +52,27 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
             continue
         emit("status", "Transcribing audio..." if index == 0 else "Writing output...")
         provider = providers[index]
+        truncated = False
+        try:
+            if index == 0:
+                text, usage = provider.transcribe(model, path, prompts[0], method)
+            else:
+                text, usage = provider.generate(model, transcript, prompts[1])
+        except TruncatedOutput as exc:
+            text, usage, truncated = exc.text, exc.usage, True
         if index == 0:
-            text, usage = provider.transcribe(model, path, prompts[0], method)
             transcript = text
             if transcript_only:
                 progress(2, "Saving transcript")
         else:
-            text, usage = provider.generate(model, transcript, prompts[1])
             progress(total - 1, "Saving memo")
         target = folder / (stamp + ("-transcript.txt" if index == 0 else "-memo.md"))
         target.write_text(text, encoding="utf-8")
         emit("transcript" if index == 0 else "memo", text)
         emit("log", "%s / %s | %s | Saved %s" % (name, model, json.dumps(usage), target.name))
+        if truncated:
+            raise ProviderError("The %s was cut off at the model's output limit. The partial text is saved as %s."
+                                % ("transcript" if index == 0 else "memo", target.name))
         if index == 0 and not transcript_only:
             progress(2, "Writing memo")
     progress(total, "Completed")

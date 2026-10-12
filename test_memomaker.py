@@ -42,6 +42,9 @@ class PromptLoadingTests(unittest.TestCase):
                 self.assertTrue(transcript_prompt.strip())
                 self.assertTrue(output_prompt.strip())
 
+    def test_default_profile_is_en(self):
+        self.assertEqual(self.memomaker.DEFAULT_LANGUAGE, "EN")
+
     def test_second_prompt_section_can_use_article_heading(self):
         transcript_prompt, output_prompt = self.memomaker.read_prompts_from_file("EN-ARTICLE")
 
@@ -244,19 +247,64 @@ class ProviderTests(unittest.TestCase):
         from unittest.mock import Mock
         from types import SimpleNamespace
         from providers import GoogleProvider
+        from google.genai import types
         provider = GoogleProvider.__new__(GoogleProvider)
-        provider.api = Mock()
-        provider.api.GenerativeModel.return_value.generate_content.return_value = SimpleNamespace(text="Transcript")
-        uploaded = SimpleNamespace(name="files/test", state=SimpleNamespace(name="ACTIVE"))
-        provider.api.upload_file.return_value = uploaded
+        provider.client = Mock()
+        provider.types = types
+        stop = SimpleNamespace(finish_reason=types.FinishReason.STOP)
+        provider.client.models.generate_content.return_value = SimpleNamespace(text="Transcript", candidates=[stop])
+        processing = SimpleNamespace(name="files/test", state=types.FileState.PROCESSING)
+        active = SimpleNamespace(name="files/test", state=types.FileState.ACTIVE)
+        provider.client.files.upload.return_value = processing
+        provider.client.files.get.return_value = active
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "audio.wav"
             path.write_bytes(b"audio")
             provider.transcribe("gemini", str(path), "Transcribe", "inline")
-            content = provider.api.GenerativeModel.return_value.generate_content.call_args.args[0][1]
-            self.assertIn(content["mime_type"], ("audio/wav", "audio/x-wav"))
-            provider.transcribe("gemini", str(path), "Transcribe", "upload")
-            provider.api.delete_file.assert_called_once_with("files/test")
+            content = provider.client.models.generate_content.call_args.kwargs["contents"][1]
+            self.assertIn(content.inline_data.mime_type, ("audio/wav", "audio/x-wav"))
+            with patch("providers.time.sleep"):
+                provider.transcribe("gemini", str(path), "Transcribe", "upload")
+            provider.client.files.get.assert_called_once_with(name="files/test")
+            self.assertIs(provider.client.models.generate_content.call_args.kwargs["contents"][1], active)
+            provider.client.files.delete.assert_called_once_with(name="files/test")
+
+    def test_google_max_tokens_returns_partial_text(self):
+        from types import SimpleNamespace
+        from google.genai import types
+        from providers import GoogleProvider, TruncatedOutput
+        provider = GoogleProvider.__new__(GoogleProvider)
+        provider.client = Mock()
+        provider.client.models.generate_content.return_value = SimpleNamespace(
+            text="Partial", candidates=[SimpleNamespace(finish_reason=types.FinishReason.MAX_TOKENS)])
+        with self.assertRaises(TruncatedOutput) as caught:
+            provider.generate("gemini", "Transcript", "Write")
+        self.assertEqual(caught.exception.text, "Partial")
+
+    def test_chat_length_finish_returns_partial_text(self):
+        from providers import TruncatedOutput
+        provider = ChatProvider("key", "https://example.test/v1")
+        response = {"choices": [{"message": {"content": "Partial"}, "finish_reason": "length"}], "usage": {"completion_tokens": 9}}
+        with patch.object(provider, "request", return_value=response):
+            with self.assertRaises(TruncatedOutput) as caught:
+                provider.generate("model", "transcript", "write")
+        self.assertEqual((caught.exception.text, caught.exception.usage), ("Partial", {"completion_tokens": 9}))
+
+    def test_truncated_transcript_is_saved_and_memo_is_not_written(self):
+        from types import SimpleNamespace
+        from workspace_ui import run_pipeline
+        from providers import TruncatedOutput
+        with tempfile.TemporaryDirectory() as directory:
+            core = SimpleNamespace(OUTPUT_FOLDER=directory, validate_audio_file=lambda p: (True, ""), validate_prompt_input=lambda p: (True, ""))
+            provider = Mock()
+            provider.transcribe.side_effect = TruncatedOutput("Partial transcript", {})
+            events = []
+            with patch("workspace_ui.create_provider", return_value=provider):
+                with self.assertRaisesRegex(ProviderError, "cut off.*-transcript.txt"):
+                    run_pipeline(core, "audio.mp3", [("Google Gemini", "gemini"), ("Google Gemini", "gemini")], {}, ["Transcribe", "Write"], "inline", lambda k, v: events.append((k, v)))
+            self.assertEqual(next(Path(directory).glob("*-transcript.txt")).read_text(), "Partial transcript")
+            provider.generate.assert_not_called()
+            self.assertIn(("transcript", "Partial transcript"), events)
 
     def test_mixed_provider_pipeline_preserves_transcript_on_writing_failure(self):
         from types import SimpleNamespace
