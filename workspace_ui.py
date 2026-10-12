@@ -80,25 +80,80 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
 
 
 
-def cli(core):
-    parser = argparse.ArgumentParser(description="MemoMaker")
-    parser.add_argument("audio_file")
-    parser.add_argument("--provider", choices=PROVIDERS, default=PROVIDERS[0])
-    parser.add_argument("--model", default=core.MODEL_NAME)
-    parser.add_argument("--writing-provider", choices=PROVIDERS)
-    parser.add_argument("--writing-model")
-    parser.add_argument("--base-url", default=os.environ.get("CUSTOM_API_BASE_URL", ""))
-    parser.add_argument("--audio-mode", choices=["chat", "transcriptions"], default="chat")
-    parser.add_argument("--profile", choices=list(core.AVAILABLE_LANGUAGES), default=core.DEFAULT_LANGUAGE)
-    parser.add_argument("--prompt")
-    parser.add_argument("--method", choices=["auto", "inline", "upload"], default="inline")
-    args = parser.parse_args()
-    prompts = list(core.read_prompts_from_file(args.profile))
-    if args.prompt:
-        prompts[0] = args.prompt
-    selections = [(args.provider, args.model), (args.writing_provider or args.provider, args.writing_model or args.model)]
+# Command-line defaults per provider. A provider without an entry needs an explicit model.
+CLI_TRANSCRIPTION = ("OpenRouter", {"OpenRouter": "microsoft/mai-transcribe-2", "Google Gemini": "gemini-3.8-flash"})
+CLI_WRITING = ("Google Gemini", {"Google Gemini": "gemini-3.8-flash"})
+
+
+def read_text_file(parser, path, label):
     try:
-        run_pipeline(core, args.audio_file, selections, {"base_url": args.base_url, "audio_mode": args.audio_mode}, prompts, args.method,
-                     lambda kind, value: print(value) if kind in ("status", "log") else None)
+        return Path(path).read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError) as exc:
+        parser.error("Cannot read %s %s: %s" % (label, path, exc))
+
+
+def cli(core):
+    parser = argparse.ArgumentParser(
+        prog="memomaker-ui.pyw", description="MemoMaker: transcribe audio and write a memo without opening the window.")
+    parser.add_argument("audio_file", nargs="?", help="audio file to process (MP3, WAV, M4A, OGG, FLAC, AAC); omit with --transcript or --list-models")
+    parser.add_argument("--provider", choices=PROVIDERS, default=CLI_TRANSCRIPTION[0], help="transcription provider (default: %(default)s)")
+    parser.add_argument("--model", help="transcription model ID; default %s" % ", ".join("%s for %s" % (m, p) for p, m in CLI_TRANSCRIPTION[1].items()))
+    parser.add_argument("--writing-provider", choices=PROVIDERS, default=CLI_WRITING[0], help="memo writing provider (default: %(default)s)")
+    parser.add_argument("--writing-model", help="memo writing model ID; default %s" % ", ".join("%s for %s" % (m, p) for p, m in CLI_WRITING[1].items()))
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--transcript-only", action="store_true", help="transcribe the audio and skip memo writing")
+    mode.add_argument("--transcript", metavar="FILE", help="write a memo from an existing UTF-8 transcript file instead of audio")
+    parser.add_argument("--method", choices=["auto", "inline", "upload"], default="inline", help="how Gemini receives audio: inline in the request, upload through the Files API, or auto (upload at 20 MB and above) (default: %(default)s)")
+    parser.add_argument("--profile", choices=list(core.AVAILABLE_LANGUAGES), default=core.DEFAULT_LANGUAGE, help="prompt profile from transcription-prompt-*.md (default: %(default)s)")
+    transcription_prompt = parser.add_mutually_exclusive_group()
+    transcription_prompt.add_argument("--transcription-prompt", "--prompt", metavar="TEXT", help="replace the profile's transcription prompt; dedicated speech-to-text models ignore it")
+    transcription_prompt.add_argument("--transcription-prompt-file", metavar="FILE", help="read the transcription prompt from a UTF-8 file")
+    memo_prompt = parser.add_mutually_exclusive_group()
+    memo_prompt.add_argument("--memo-prompt", metavar="TEXT", help="replace the profile's memo prompt")
+    memo_prompt.add_argument("--memo-prompt-file", metavar="FILE", help="read the memo prompt from a UTF-8 file")
+    parser.add_argument("--base-url", default=os.environ.get("CUSTOM_API_BASE_URL", ""), help="Custom API base URL, including /v1 when required (default: CUSTOM_API_BASE_URL environment variable)")
+    parser.add_argument("--audio-mode", choices=["chat", "transcriptions"], default="chat", help="Custom API audio endpoint: chat messages or multipart /audio/transcriptions (default: %(default)s)")
+    parser.add_argument("--list-models", action="store_true", help="list the transcription models of --provider and the writing models of --writing-provider, then exit")
+    args = parser.parse_args()
+    settings = {"base_url": args.base_url, "audio_mode": args.audio_mode}
+
+    if args.list_models:
+        try:
+            for title, name, audio in [("Transcription", args.provider, True), ("Writing", args.writing_provider, False)]:
+                print("%s models (%s):" % (title, name))
+                for model in create_provider(name, settings).models(audio):
+                    print("  " + model)
+        except Exception as exc:
+            parser.exit(1, "Error: %s\n" % exc)
+        return
+
+    if args.transcript and args.audio_file:
+        parser.error("Use either audio_file or --transcript, not both.")
+    if not args.transcript and not args.audio_file:
+        parser.error("audio_file is required unless --transcript or --list-models is used.")
+    model = args.model or CLI_TRANSCRIPTION[1].get(args.provider)
+    writing_model = args.writing_model or CLI_WRITING[1].get(args.writing_provider)
+    if not model and not args.transcript:
+        parser.error("Set --model for %s." % args.provider)
+    if not writing_model and not args.transcript_only:
+        parser.error("Set --writing-model for %s." % args.writing_provider)
+
+    prompts = list(core.read_prompts_from_file(args.profile))
+    if args.transcription_prompt_file:
+        prompts[0] = read_text_file(parser, args.transcription_prompt_file, "transcription prompt")
+    elif args.transcription_prompt:
+        prompts[0] = args.transcription_prompt
+    if args.memo_prompt_file:
+        prompts[1] = read_text_file(parser, args.memo_prompt_file, "memo prompt")
+    elif args.memo_prompt:
+        prompts[1] = args.memo_prompt
+    transcript = read_text_file(parser, args.transcript, "transcript") if args.transcript else None
+
+    selections = [(args.provider, model or ""), (args.writing_provider, writing_model or "")]
+    try:
+        run_pipeline(core, args.audio_file, selections, settings, prompts, args.method,
+                     lambda kind, value: print(value) if kind in ("status", "log") else None,
+                     transcript, args.transcript_only)
     except Exception as exc:
         parser.exit(1, "Error: %s\n" % exc)
+    print("Saved in " + str(Path(core.OUTPUT_FOLDER).resolve()))

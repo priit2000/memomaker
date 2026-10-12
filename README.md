@@ -30,19 +30,7 @@ The footer shows actual completed stages and elapsed time: validation, transcrip
 
 The desktop UI uses pywebview with Microsoft Edge WebView2 on Windows. Fonts, Lucide icons, Markdown parsing, and sanitization are bundled locally under `ui/`; the UI does not load these assets from a CDN at runtime.
 
-Example mixed-provider command:
-
-```powershell
-python .\memomaker-ui.pyw .\audio.mp3 --provider "Google Gemini" --model gemini-3-flash-preview --writing-provider OpenRouter --writing-model "your-provider/model-id"
-```
-
-Custom endpoint example:
-
-```powershell
-python .\memomaker-ui.pyw .\audio.mp3 --provider "Custom API" --base-url http://localhost:8000/v1 --audio-mode transcriptions --model whisper --writing-provider OpenRouter --writing-model "your-provider/model-id"
-```
-
-Use `--profile EN-ARTICLE` to select a prompt profile in CLI mode. New providers can implement `models`, `transcribe`, and `generate` in `providers.py` and be registered in `create_provider`. A custom URL supports compatible protocols, not arbitrary vendor APIs.
+The command line covers every processing setting; see [Command Line](#command-line). New providers can implement `models`, `transcribe`, and `generate` in `providers.py` and be registered in `create_provider`. A custom URL supports compatible protocols, not arbitrary vendor APIs.
 
 The app supports GUI and CLI modes from `memomaker-ui.pyw`. It does not record audio. Select an existing audio file, choose a prompt profile, process it, and the app writes timestamped results to `outputs/`.
 
@@ -86,7 +74,7 @@ Remembered Windows environment keys are not encrypted credential storage. Do not
 
 ## Run
 
-Run commands from the MemoMaker folder. Prompt discovery and the `outputs/` directory currently use the working directory. Restart the app after adding a prompt profile or updating the application.
+Prompt profiles and the `outputs/` folder are located next to `memomaker-ui.pyw`, so the app can be started from any folder. Restart the app after adding a prompt profile or updating the application.
 
 GUI mode:
 
@@ -94,10 +82,10 @@ GUI mode:
 python .\memomaker-ui.pyw
 ```
 
-CLI mode:
+CLI mode (use `python`, not `pythonw`, to see output):
 
 ```powershell
-python .\memomaker-ui.pyw .\audio_file.mp3 --method inline
+python .\memomaker-ui.pyw .\audio_file.mp3
 ```
 
 Google processing methods (other providers use their own transport):
@@ -105,6 +93,44 @@ Google processing methods (other providers use their own transport):
 - `auto`: uses inline processing below 20 MB and upload processing at or above 20 MB
 - `inline`: sends the audio bytes directly in the request; default
 - `upload`: uploads the file through Gemini's file API before processing
+
+## Command Line
+
+Any argument starts command-line mode instead of the window. The command line does not read the models saved in the window; it uses the defaults below or the given flags. API keys come from the same environment variables as the window.
+
+| Parameter | Default | Purpose |
+| --- | --- | --- |
+| `audio_file` | none | Audio to process. Omit it with `--transcript` or `--list-models`. |
+| `--provider` | `OpenRouter` | Transcription provider: `"Google Gemini"`, `OpenRouter`, or `"Custom API"`. |
+| `--model` | `microsoft/mai-transcribe-2` for OpenRouter, `gemini-3.8-flash` for Google Gemini | Transcription model ID. Required for Custom API. |
+| `--writing-provider` | `"Google Gemini"` | Memo writing provider. |
+| `--writing-model` | `gemini-3.8-flash` for Google Gemini | Writing model ID. Required for OpenRouter and Custom API. |
+| `--transcript-only` | off | Transcribe and skip memo writing. |
+| `--transcript FILE` | off | Write a memo from an existing UTF-8 transcript instead of audio. |
+| `--method` | `inline` | Gemini audio transport: `inline`, `upload`, or `auto`. |
+| `--profile` | `EN` | Prompt profile from `transcription-prompt-*.md`. |
+| `--transcription-prompt TEXT` (alias `--prompt`) | profile | Replace the transcription prompt. Dedicated speech-to-text models ignore it. |
+| `--transcription-prompt-file FILE` | profile | Read the transcription prompt from a UTF-8 file. |
+| `--memo-prompt TEXT` | profile | Replace the memo prompt. |
+| `--memo-prompt-file FILE` | profile | Read the memo prompt from a UTF-8 file. |
+| `--base-url` | `CUSTOM_API_BASE_URL` | Custom API base URL, including `/v1` when required. |
+| `--audio-mode` | `chat` | Custom API audio endpoint: `chat` or `transcriptions`. |
+| `--list-models` | off | List transcription models of `--provider` and writing models of `--writing-provider`, then exit. |
+
+OpenRouter model IDs are checked against the live catalog before any paid request. Google model IDs are not checked in advance; an unknown ID fails at the request.
+
+The console shows status lines and token usage. Results are saved in `outputs/`. Errors print `Error: ...` and exit with code 1.
+
+Examples:
+
+```powershell
+python .\memomaker-ui.pyw .\meeting.mp3
+python .\memomaker-ui.pyw .\meeting.mp3 --transcript-only
+python .\memomaker-ui.pyw --transcript .\outputs\260908-143022-123-transcript.txt --profile EN-ARTICLE
+python .\memomaker-ui.pyw .\meeting.mp3 --writing-provider OpenRouter --writing-model "your-provider/model-id"
+python .\memomaker-ui.pyw .\meeting.mp3 --provider "Custom API" --base-url http://localhost:8000/v1 --audio-mode transcriptions --model whisper
+python .\memomaker-ui.pyw --list-models --provider "Google Gemini"
+```
 
 ## GUI Workflow
 
@@ -170,8 +196,10 @@ MODEL_NAME = 'gemini-3-flash-preview'
 MAX_FILE_SIZE = 100 * 1024 * 1024
 MIN_FILE_SIZE = 1024
 
-OUTPUT_FOLDER = os.path.join(os.getcwd(), "outputs")
+OUTPUT_FOLDER = os.path.join(APP_FOLDER, "outputs")
 ```
+
+Command-line model defaults are `CLI_TRANSCRIPTION` and `CLI_WRITING` in `workspace_ui.py`.
 
 Provider/model choices and custom endpoint settings are stored in `%APPDATA%/MemoMaker/settings.json`, excluding API keys. Google Auto's 20 MB cutoff is implemented in `providers.py`; editing the legacy `INLINE_THRESHOLD` constant in the entry point alone does not change provider routing. Model-specific limits may be lower than the app's 100 MB validation limit.
 
@@ -251,7 +279,7 @@ Check that the file:
 - matches `transcription-prompt-*.md`
 - has at least two top-level headings beginning with `# `
 - is saved as UTF-8
-- is in the working directory used to start MemoMaker
+- is in the MemoMaker folder, next to `memomaker-ui.pyw`
 
 ### OpenRouter transcription model is missing
 

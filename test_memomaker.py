@@ -141,6 +141,92 @@ class DesktopFeaturesTests(unittest.TestCase):
                 self.assertIn("error", self.api.load_output("memo"))
 
 
+class CommandLineTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.core = load_memomaker_module()
+
+    def run_cli(self, *argv):
+        from workspace_ui import cli
+        with patch("sys.argv", ["memomaker-ui.pyw", *argv]), patch("workspace_ui.run_pipeline") as pipeline, patch("sys.stdout"):
+            cli(self.core)
+        return pipeline.call_args.args
+
+    def assert_cli_error(self, *argv):
+        from workspace_ui import cli
+        with patch("sys.argv", ["memomaker-ui.pyw", *argv]), patch("workspace_ui.run_pipeline") as pipeline, \
+                patch("sys.stderr"), self.assertRaises(SystemExit) as caught:
+            cli(self.core)
+        self.assertNotEqual(caught.exception.code, 0)
+        pipeline.assert_not_called()
+
+    def test_defaults_use_mai_transcribe_and_gemini_flash(self):
+        core, path, selections, settings, prompts, method, emit, transcript, transcript_only = self.run_cli("audio.mp3")
+        self.assertEqual(path, "audio.mp3")
+        self.assertEqual(selections, [("OpenRouter", "microsoft/mai-transcribe-2"), ("Google Gemini", "gemini-3.8-flash")])
+        self.assertEqual(prompts, list(self.core.read_prompts_from_file("EN")))
+        self.assertEqual((method, transcript, transcript_only), ("inline", None, False))
+
+    def test_provider_change_selects_that_providers_default_or_requires_model(self):
+        selections = self.run_cli("audio.mp3", "--provider", "Google Gemini")[2]
+        self.assertEqual(selections[0], ("Google Gemini", "gemini-3.8-flash"))
+        self.assert_cli_error("audio.mp3", "--provider", "Custom API")
+        self.assert_cli_error("audio.mp3", "--writing-provider", "OpenRouter")
+        selections = self.run_cli("audio.mp3", "--writing-provider", "OpenRouter", "--writing-model", "anthropic/claude-sonnet-5-5")[2]
+        self.assertEqual(selections[1], ("OpenRouter", "anthropic/claude-sonnet-5-5"))
+
+    def test_existing_transcript_and_transcript_only_modes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "saved.txt"
+            path.write_text("Saved transcript", encoding="utf-8-sig")
+            args = self.run_cli("--transcript", str(path))
+            self.assertEqual((args[1], args[7], args[8]), (None, "Saved transcript", False))
+            self.assert_cli_error("audio.mp3", "--transcript", str(path))
+            self.assert_cli_error("--transcript", str(path), "--transcript-only")
+        args = self.run_cli("audio.mp3", "--transcript-only")
+        self.assertEqual((args[7], args[8]), (None, True))
+        self.assert_cli_error()
+
+    def test_prompt_overrides_from_text_and_files(self):
+        self.assertEqual(self.run_cli("audio.mp3", "--prompt", "Alias prompt")[4][0], "Alias prompt")
+        with tempfile.TemporaryDirectory() as directory:
+            transcription = Path(directory) / "transcription.md"
+            memo = Path(directory) / "memo.md"
+            transcription.write_text("File transcription prompt", encoding="utf-8")
+            memo.write_text("File memo prompt", encoding="utf-8")
+            prompts = self.run_cli("audio.mp3", "--transcription-prompt-file", str(transcription), "--memo-prompt-file", str(memo))[4]
+            self.assertEqual(prompts, ["File transcription prompt", "File memo prompt"])
+        prompts = self.run_cli("audio.mp3", "--transcription-prompt", "Text one", "--memo-prompt", "Text two", "--profile", "EN-ARTICLE")[4]
+        self.assertEqual(prompts, ["Text one", "Text two"])
+        self.assert_cli_error("audio.mp3", "--memo-prompt", "Text", "--memo-prompt-file", "memo.md")
+
+    def test_list_models_prints_both_stages_without_processing(self):
+        import io
+        from workspace_ui import cli
+        provider = Mock()
+        provider.models.side_effect = lambda audio: ["stt-model"] if audio else ["writer-model"]
+        output = io.StringIO()
+        with patch("sys.argv", ["memomaker-ui.pyw", "--list-models"]), patch("workspace_ui.create_provider", return_value=provider) as factory, \
+                patch("workspace_ui.run_pipeline") as pipeline, patch("sys.stdout", output):
+            cli(self.core)
+        pipeline.assert_not_called()
+        self.assertEqual([call.args[0] for call in factory.call_args_list], ["OpenRouter", "Google Gemini"])
+        self.assertEqual(output.getvalue().splitlines(), ["Transcription models (OpenRouter):", "  stt-model", "Writing models (Google Gemini):", "  writer-model"])
+
+    def test_profiles_and_outputs_do_not_depend_on_working_directory(self):
+        import os
+        root = Path(__file__).resolve().parent
+        with tempfile.TemporaryDirectory() as directory:
+            previous = os.getcwd()
+            os.chdir(directory)
+            try:
+                core = load_memomaker_module()
+            finally:
+                os.chdir(previous)
+        self.assertIn("EN", core.AVAILABLE_LANGUAGES)
+        self.assertEqual(Path(core.OUTPUT_FOLDER), root / "outputs")
+
+
 class ProviderTests(unittest.TestCase):
     def router(self):
         provider = OpenRouterProvider("key")

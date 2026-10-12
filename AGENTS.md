@@ -36,7 +36,7 @@ The pipeline emits `status`, `log`, `transcript`, `memo`, and structured `progre
 
 Generated files use `outputs/yymmdd-hhmmss-mmm-transcript.txt` and matching `-memo.md` names. Save the transcript before memo writing so writing failures do not discard it.
 
-The GUI loads nonempty UTF-8/BOM text or Markdown files up to 10 MB. Loading a transcript selects the workspace-transcript source, skips audio validation and transcription credentials, and runs only the writing model. The CLI currently still requires an audio-file argument.
+The GUI loads nonempty UTF-8/BOM text or Markdown files up to 10 MB. Loading a transcript selects the workspace-transcript source, skips audio validation and transcription credentials, and runs only the writing model. The CLI covers every processing setting: `--transcript FILE` writes from an existing transcript without audio, `--transcript-only` skips writing, prompt text/file overrides exist for both sections, and `--list-models` lists both stages. CLI model defaults are `CLI_TRANSCRIPTION` (OpenRouter `microsoft/mai-transcribe-2`) and `CLI_WRITING` (Google `gemini-3.8-flash`) in `workspace_ui.py`; the CLI does not read GUI-saved stages.
 
 Speaker changes replace matching names in both workspace documents in one pass, with Undo for the latest rename. They do not run AI generation or rewrite inferred identities. Manual edits and renames need Export to persist; source documents are not automatically overwritten.
 
@@ -44,7 +44,7 @@ Copy provides Windows CF_HTML plus Unicode plain text. CF_HTML offsets count UTF
 
 ## Prompts and Configuration
 
-Profile discovery scans the current working directory for `transcription-prompt-*.md`. Preserve the complete filename suffix: `en-article` becomes `EN-ARTICLE`. Start the app from the repository folder and restart after adding profiles.
+Profile discovery scans the folder containing `memomaker-ui.pyw` for `transcription-prompt-*.md`, and `outputs/` is created there too, regardless of the working directory. Preserve the complete filename suffix: `en-article` becomes `EN-ARTICLE`. `EN` is the default profile when present. Restart after adding profiles.
 
 The first two top-level Markdown headings delimit transcription and writing prompts. The second heading may be Memo, Article, Summary, or another title; later headings belong to the writing prompt. Use `##` inside the transcription section. Do not split only on a literal `# Memo`.
 

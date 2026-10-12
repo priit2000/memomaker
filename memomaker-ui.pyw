@@ -36,8 +36,11 @@ VALID_MIME_TYPES = {
 }
 
 
+# Prompt profiles and outputs live next to this file, whatever folder the app is started from
+APP_FOLDER = os.path.dirname(os.path.abspath(__file__))
+
 # Create output folder
-OUTPUT_FOLDER = os.path.join(os.getcwd(), "outputs")
+OUTPUT_FOLDER = os.path.join(APP_FOLDER, "outputs")
 if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
 
@@ -49,7 +52,7 @@ def detect_available_languages():
     languages = {}
     prompt_pattern = "transcription-prompt-*.md"
     
-    prompt_files = glob.glob(os.path.join(os.getcwd(), prompt_pattern))
+    prompt_files = sorted(glob.glob(os.path.join(APP_FOLDER, prompt_pattern)))
     
     for file_path in prompt_files:
         filename = os.path.basename(file_path)
