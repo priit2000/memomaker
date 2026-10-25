@@ -82,7 +82,7 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
 
 # Command-line defaults per provider. A provider without an entry needs an explicit model.
 CLI_TRANSCRIPTION = ("OpenRouter", {"OpenRouter": "microsoft/mai-transcribe-2", "Google Gemini": "gemini-3.8-flash"})
-CLI_WRITING = ("Google Gemini", {"Google Gemini": "gemini-3.8-flash"})
+CLI_WRITING = ("OpenRouter", {"OpenRouter": "google/gemini-3.8-flash", "Google Gemini": "gemini-3.8-flash"})
 
 
 def read_text_file(parser, path, label):

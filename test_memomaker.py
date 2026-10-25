@@ -163,7 +163,7 @@ class CommandLineTests(unittest.TestCase):
     def test_defaults_use_mai_transcribe_and_gemini_flash(self):
         core, path, selections, settings, prompts, method, emit, transcript, transcript_only = self.run_cli("audio.mp3")
         self.assertEqual(path, "audio.mp3")
-        self.assertEqual(selections, [("OpenRouter", "microsoft/mai-transcribe-2"), ("Google Gemini", "gemini-3.8-flash")])
+        self.assertEqual(selections, [("OpenRouter", "microsoft/mai-transcribe-2"), ("OpenRouter", "google/gemini-3.8-flash")])
         self.assertEqual(prompts, list(self.core.read_prompts_from_file("EN")))
         self.assertEqual((method, transcript, transcript_only), ("inline", None, False))
 
@@ -171,7 +171,9 @@ class CommandLineTests(unittest.TestCase):
         selections = self.run_cli("audio.mp3", "--provider", "Google Gemini")[2]
         self.assertEqual(selections[0], ("Google Gemini", "gemini-3.8-flash"))
         self.assert_cli_error("audio.mp3", "--provider", "Custom API")
-        self.assert_cli_error("audio.mp3", "--writing-provider", "OpenRouter")
+        self.assert_cli_error("audio.mp3", "--writing-provider", "Custom API")
+        selections = self.run_cli("audio.mp3", "--writing-provider", "Google Gemini")[2]
+        self.assertEqual(selections[1], ("Google Gemini", "gemini-3.8-flash"))
         selections = self.run_cli("audio.mp3", "--writing-provider", "OpenRouter", "--writing-model", "anthropic/claude-sonnet-5-5")[2]
         self.assertEqual(selections[1], ("OpenRouter", "anthropic/claude-sonnet-5-5"))
 
@@ -210,8 +212,8 @@ class CommandLineTests(unittest.TestCase):
                 patch("workspace_ui.run_pipeline") as pipeline, patch("sys.stdout", output):
             cli(self.core)
         pipeline.assert_not_called()
-        self.assertEqual([call.args[0] for call in factory.call_args_list], ["OpenRouter", "Google Gemini"])
-        self.assertEqual(output.getvalue().splitlines(), ["Transcription models (OpenRouter):", "  stt-model", "Writing models (Google Gemini):", "  writer-model"])
+        self.assertEqual([call.args[0] for call in factory.call_args_list], ["OpenRouter", "OpenRouter"])
+        self.assertEqual(output.getvalue().splitlines(), ["Transcription models (OpenRouter):", "  stt-model", "Writing models (OpenRouter):", "  writer-model"])
 
     def test_profiles_and_outputs_do_not_depend_on_working_directory(self):
         import os

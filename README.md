@@ -103,8 +103,8 @@ Any argument starts command-line mode instead of the window. The command line do
 | `audio_file` | none | Audio to process. Omit it with `--transcript` or `--list-models`. |
 | `--provider` | `OpenRouter` | Transcription provider: `"Google Gemini"`, `OpenRouter`, or `"Custom API"`. |
 | `--model` | `microsoft/mai-transcribe-2` for OpenRouter, `gemini-3.8-flash` for Google Gemini | Transcription model ID. Required for Custom API. |
-| `--writing-provider` | `"Google Gemini"` | Memo writing provider. |
-| `--writing-model` | `gemini-3.8-flash` for Google Gemini | Writing model ID. Required for OpenRouter and Custom API. |
+| `--writing-provider` | `OpenRouter` | Memo writing provider. |
+| `--writing-model` | `google/gemini-3.8-flash` for OpenRouter, `gemini-3.8-flash` for Google Gemini | Writing model ID. Required for Custom API. |
 | `--transcript-only` | off | Transcribe and skip memo writing. |
 | `--transcript FILE` | off | Write a memo from an existing UTF-8 transcript instead of audio. |
 | `--method` | `inline` | Gemini audio transport: `inline`, `upload`, or `auto`. |
