@@ -297,4 +297,4 @@ Use Copy from the rendered preview for rich formatting. Copying the raw editor g
 
 ### Output language
 
-Select Estonian or English independently of the prompt profile. English prompt files supply the rules; the application adds the selected output language before and after each prompt. The selection is remembered. The CLI supports `--language et` and `--language en` (default). Dedicated transcription models ignore prompts, so their transcripts pass through the selected writing model to apply the language, including in transcript-only mode. This adds a writing-model request. The original is saved as `*-source-transcript.txt` before conversion.
+Select Estonian or English independently of the prompt profile. English prompt files supply the rules; the application adds the selected output language before and after each prompt. The selection is remembered. The CLI supports `--language et` and `--language en` (default). The existing requests receive the wrapped prompts. No translation request is added. Dedicated transcription models ignore prompts and retain the spoken language; the memo uses the selected output language.

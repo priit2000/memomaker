@@ -41,24 +41,34 @@ class OutputLanguageTests(unittest.TestCase):
             self.assertTrue(sent.endswith("Return the complete result in Estonian."))
             self.assertEqual(prompts, ["", "Write in the original language."])
 
-    def test_specialist_transcript_uses_writer_for_selected_language(self):
+    def test_language_selection_keeps_original_specialist_request_counts(self):
         from workspace_ui import run_pipeline
-        with tempfile.TemporaryDirectory() as directory:
-            core = SimpleNamespace(OUTPUT_FOLDER=directory, validate_audio_file=lambda p: (True, ""),
-                                   validate_prompt_input=lambda p: (True, ""))
-            specialist, writer = Mock(), Mock()
-            specialist.is_specialist.return_value = True
-            specialist.transcribe.return_value = ("Original transcript", {})
-            writer.generate.return_value = ("Translated transcript", {})
-            with patch("workspace_ui.create_provider", side_effect=[specialist, writer]):
-                run_pipeline(core, "audio.mp3", [("OpenRouter", "stt"), ("Custom API", "writer")],
-                             {"output_language": "en"}, ["Transcribe accurately", ""], "inline",
-                             lambda *args: None, transcript_only=True)
-            writer.generate.assert_called_once()
-            self.assertIn("English", writer.generate.call_args.args[2])
-            self.assertEqual(next(Path(directory).glob("*-source-transcript.txt")).read_text(), "Original transcript")
-            self.assertEqual(next(p for p in Path(directory).glob("*-transcript.txt") if "source" not in p.name).read_text(), "Translated transcript")
-            self.assertFalse(list(Path(directory).glob("*-memo.md")))
+        for language in ("et", "en"):
+            for transcript_only in (True, False):
+                with self.subTest(language=language, transcript_only=transcript_only), tempfile.TemporaryDirectory() as directory:
+                    core = SimpleNamespace(OUTPUT_FOLDER=directory, validate_audio_file=lambda p: (True, ""),
+                                           validate_prompt_input=lambda p: (True, ""))
+                    specialist, writer = Mock(), Mock()
+                    specialist.is_specialist.return_value = True
+                    specialist.transcribe.return_value = ("Original transcript", {"seconds": 5})
+                    writer.generate.return_value = ("Memo", {"tokens": 10})
+                    events = []
+                    with patch("workspace_ui.create_provider", side_effect=[specialist, writer]) as factory:
+                        run_pipeline(core, "audio.mp3", [("OpenRouter", "stt"), ("Custom API", "writer")],
+                                     {"output_language": language}, ["Transcribe accurately", "Write a memo"], "inline",
+                                     lambda k, v: events.append((k, v)), transcript_only=transcript_only)
+                    specialist.transcribe.assert_called_once()
+                    specialist.generate.assert_not_called()
+                    self.assertEqual(factory.call_count, 1 if transcript_only else 2)
+                    if transcript_only:
+                        writer.generate.assert_not_called()
+                    else:
+                        writer.generate.assert_called_once()
+                        self.assertEqual(writer.generate.call_args.args[1], "Original transcript")
+                        self.assertIn("Estonian" if language == "et" else "English", writer.generate.call_args.args[2])
+                    self.assertEqual(next(Path(directory).glob("*-transcript.txt")).read_text(), "Original transcript")
+                    self.assertFalse(list(Path(directory).glob("*-source-transcript.txt")))
+                    self.assertFalse(any("Applying transcript language" in str(v) for k, v in events))
 
 
 class PromptLoadingTests(unittest.TestCase):

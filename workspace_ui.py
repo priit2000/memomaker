@@ -7,6 +7,7 @@ from pathlib import Path
 from providers import PROVIDERS, KEY_NAMES, ProviderError, TruncatedOutput, create_provider
 
 CONFIG = Path(os.environ.get("APPDATA", str(Path.home()))) / "MemoMaker" / "settings.json"
+
 OUTPUT_LANGUAGES = {"et": "Estonian", "en": "English"}
 
 
@@ -45,7 +46,6 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
         prompts = [language_prompt(prompt, language) if prompt else prompt for prompt in prompts]
     # Validate both configurations before making a billable request.
     providers = {}
-    specialist = False
     for index in range(first_stage, last_stage):
         name, model = selections[index]
         if not model.strip():
@@ -54,16 +54,8 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
         if name == "OpenRouter":
             provider.validate_model(model, index == 0)
             if index == 0 and provider.is_specialist(model):
-                specialist = True
                 emit("log", "Specialist transcription: Markdown transcription instructions are not applied; memo instructions remain active.")
         providers[index] = provider
-    if specialist and language and 1 not in providers:
-        name, model = selections[1]
-        if not model.strip():
-            raise ValueError("Select a writing model to apply the output language to specialist transcripts.")
-        providers[1] = create_provider(name, settings)
-        if name == "OpenRouter":
-            providers[1].validate_model(model, False)
     progress(1, "Writing memo" if first_stage else "Transcribing audio")
     stamp = time.strftime("%y%m%d-%H%M%S") + "-%03d" % (time.time_ns() // 1000000 % 1000)
     folder = Path(core.OUTPUT_FOLDER)
@@ -80,14 +72,6 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
         try:
             if index == 0:
                 text, usage = provider.transcribe(model, path, prompts[0], method)
-                if specialist and language:
-                    emit("status", "Applying transcript language...")
-                    emit("log", "The writing model applies the selected language to the specialist transcript.")
-                    raw_target = folder / (stamp + "-source-transcript.txt")
-                    raw_target.write_text(text, encoding="utf-8")
-                    text, language_usage = providers[1].generate(selections[1][1], text,
-                        prompts[0] + "\nConvert the supplied transcript to the selected language. Preserve all content, speaker identities, and timestamps. Do not summarize or invent content.")
-                    usage = {"transcription": usage, "language": language_usage}
             else:
                 text, usage = provider.generate(model, transcript, prompts[1])
         except TruncatedOutput as exc:

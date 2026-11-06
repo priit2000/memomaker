@@ -43,6 +43,7 @@ Rules:
 8. Discuss risks or obstacles. Add impact and plan.
 9. Correct spelling. Keep sentences short. Avoid passive voice. Never ever use emdash —.
 10. Do not copy transcription word-for-word. Rephrase but preserve content and meaning.
+11. NO META-CONTENT!!!! Do not talk about content. Talk about then thing being disscussed. Do not do this "See juhend selgitab ," "Arutelus võrreldakse ," "Vestluses paigaldatakse ," "Kõnelejad arutavad ," "Vestluses luuakse "
 
 Output format, follow content and markdown format:
 
