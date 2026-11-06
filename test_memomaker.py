@@ -25,6 +25,42 @@ def load_memomaker_module():
     return module
 
 
+class OutputLanguageTests(unittest.TestCase):
+    def test_memo_language_overrides_profile_without_modifying_rules(self):
+        from workspace_ui import run_pipeline
+        with tempfile.TemporaryDirectory() as directory:
+            core = SimpleNamespace(OUTPUT_FOLDER=directory, validate_prompt_input=lambda p: (True, ""))
+            provider = Mock()
+            provider.generate.return_value = ("Eestikeelne memo", {})
+            prompts = ["", "Write in the original language."]
+            with patch("workspace_ui.create_provider", return_value=provider):
+                run_pipeline(core, None, [("Custom API", ""), ("Custom API", "writer")],
+                             {"output_language": "et"}, prompts, "inline", lambda *args: None, transcript="English transcript")
+            sent = provider.generate.call_args.args[2]
+            self.assertTrue(sent.startswith("Use the following rules to create the result in Estonian."))
+            self.assertTrue(sent.endswith("Return the complete result in Estonian."))
+            self.assertEqual(prompts, ["", "Write in the original language."])
+
+    def test_specialist_transcript_uses_writer_for_selected_language(self):
+        from workspace_ui import run_pipeline
+        with tempfile.TemporaryDirectory() as directory:
+            core = SimpleNamespace(OUTPUT_FOLDER=directory, validate_audio_file=lambda p: (True, ""),
+                                   validate_prompt_input=lambda p: (True, ""))
+            specialist, writer = Mock(), Mock()
+            specialist.is_specialist.return_value = True
+            specialist.transcribe.return_value = ("Original transcript", {})
+            writer.generate.return_value = ("Translated transcript", {})
+            with patch("workspace_ui.create_provider", side_effect=[specialist, writer]):
+                run_pipeline(core, "audio.mp3", [("OpenRouter", "stt"), ("Custom API", "writer")],
+                             {"output_language": "en"}, ["Transcribe accurately", ""], "inline",
+                             lambda *args: None, transcript_only=True)
+            writer.generate.assert_called_once()
+            self.assertIn("English", writer.generate.call_args.args[2])
+            self.assertEqual(next(Path(directory).glob("*-source-transcript.txt")).read_text(), "Original transcript")
+            self.assertEqual(next(p for p in Path(directory).glob("*-transcript.txt") if "source" not in p.name).read_text(), "Translated transcript")
+            self.assertFalse(list(Path(directory).glob("*-memo.md")))
+
+
 class PromptLoadingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

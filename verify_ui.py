@@ -64,6 +64,7 @@ with sync_playwright() as p:
     page.locator("#settings-close").click()
     assert page.locator("[data-method='inline']").get_attribute("class") == "active"
     page.evaluate("""window.calls=[];window.pywebview={api:{
+        set_output_language:async language=>true,
         load_output:async kind=>({text:kind==='memo'?'# Loaded memo':'Loaded transcript',name:kind+'.txt'}),
         save_prompts:async (...args)=>{calls.push(['save',...args]);return args[1];},
         copy:async (...args)=>{calls.push(['copy',...args]);return true;},
@@ -76,13 +77,14 @@ with sync_playwright() as p:
     assert page.locator("#source").input_value() == "transcript"
     assert page.locator("#methods").is_hidden()
     page.locator("#generate").click()
-    assert page.evaluate("calls.at(-1).slice(-3)") == ["inline", "Loaded transcript", False]
+    assert page.evaluate("calls.at(-1).slice(-4)") == ["inline", "Loaded transcript", False, "en"]
     assert page.locator("#load-output").is_disabled()
     page.evaluate("receive('done','Completed')")
     page.locator("#source").select_option("transcript-only")
     assert page.locator("#generate").inner_text() == "Generate transcript"
+    page.locator("#output-language").select_option("et")
     page.locator("#generate").click()
-    assert page.evaluate("calls.at(-1).slice(-3)") == ["inline", None, True]
+    assert page.evaluate("calls.at(-1).slice(-4)") == ["inline", None, True, "et"]
     page.evaluate("receive('done','Completed')")
     page.locator("[data-output='memo']").click()
     page.locator("#load-output").click()

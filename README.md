@@ -294,3 +294,7 @@ The bar measures completed stages, not bytes uploaded or audio seconds transcrib
 Speaker replacement is case-sensitive and matches names as written. Add a manual current-name/new-name row for labels that were not detected. It does not infer that two different labels refer to the same person. Export changed documents to persist them.
 
 Use Copy from the rendered preview for rich formatting. Copying the raw editor gives source text, and plain-text destinations cannot preserve formatting. Rich-text destinations control how they render the clipboard HTML.
+
+### Output language
+
+Select Estonian or English independently of the prompt profile. English prompt files supply the rules; the application adds the selected output language before and after each prompt. The selection is remembered. The CLI supports `--language et` and `--language en` (default). Dedicated transcription models ignore prompts, so their transcripts pass through the selected writing model to apply the language, including in transcript-only mode. This adds a writing-model request. The original is saved as `*-source-transcript.txt` before conversion.

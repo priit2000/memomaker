@@ -148,12 +148,28 @@ class DesktopAPI:
     def emit(self, kind, value):
         self._window.evaluate_js("window.receive(%s,%s)" % (json.dumps(kind), json.dumps(value)))
 
-    def generate(self, stages, prompts, method, transcript=None, transcript_only=False):
+    def set_output_language(self, language):
+        if language not in ("et", "en"):
+            return {"error": "Select Estonian or English as the output language."}
+        settings = dict(self._settings, output_language=language)
+        try:
+            CONFIG.parent.mkdir(parents=True, exist_ok=True)
+            CONFIG.write_text(json.dumps({k: v for k, v in settings.items() if k not in KEY_NAMES.values()}), encoding="utf-8")
+        except OSError as exc:
+            return {"error": str(exc)}
+        self._settings = settings
+        return True
+
+    def generate(self, stages, prompts, method, transcript=None, transcript_only=False, output_language="en"):
+        if output_language not in ("et", "en"):
+            return {"error": "Select Estonian or English as the output language."}
         if transcript is None and not self._path:
             return {"error": "Select an audio file first."}
         if not self._lock.acquire(blocking=False):
             return {"error": "Processing is already running."}
         path, settings = self._path, dict(self._settings)
+        settings["output_language"] = output_language
+        self._settings["output_language"] = output_language
         def work():
             try:
                 run_pipeline(self._core, path, stages, settings, prompts, method, self.emit, transcript, transcript_only)

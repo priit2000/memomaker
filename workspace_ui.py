@@ -7,6 +7,16 @@ from pathlib import Path
 from providers import PROVIDERS, KEY_NAMES, ProviderError, TruncatedOutput, create_provider
 
 CONFIG = Path(os.environ.get("APPDATA", str(Path.home()))) / "MemoMaker" / "settings.json"
+OUTPUT_LANGUAGES = {"et": "Estonian", "en": "English"}
+
+
+def language_prompt(prompt, language):
+    name = OUTPUT_LANGUAGES[language]
+    instruction = ("Use the following rules to create the result in %s. "
+                   "Write all headings, labels, and content in %s. "
+                   "This output-language instruction overrides conflicting language instructions in the rules."
+                   % (name, name))
+    return instruction + "\n\n" + prompt + "\n\nReturn the complete result in " + name + "."
 
 
 def run_pipeline(core, path, selections, settings, prompts, method, emit, transcript=None, transcript_only=False):
@@ -28,8 +38,14 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
         valid, reason = core.validate_prompt_input(prompt)
         if not valid:
             raise ValueError(reason)
+    language = settings.get("output_language")
+    if language is not None:
+        if language not in OUTPUT_LANGUAGES:
+            raise ValueError("Select Estonian or English as the output language.")
+        prompts = [language_prompt(prompt, language) if prompt else prompt for prompt in prompts]
     # Validate both configurations before making a billable request.
     providers = {}
+    specialist = False
     for index in range(first_stage, last_stage):
         name, model = selections[index]
         if not model.strip():
@@ -38,8 +54,16 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
         if name == "OpenRouter":
             provider.validate_model(model, index == 0)
             if index == 0 and provider.is_specialist(model):
+                specialist = True
                 emit("log", "Specialist transcription: Markdown transcription instructions are not applied; memo instructions remain active.")
         providers[index] = provider
+    if specialist and language and 1 not in providers:
+        name, model = selections[1]
+        if not model.strip():
+            raise ValueError("Select a writing model to apply the output language to specialist transcripts.")
+        providers[1] = create_provider(name, settings)
+        if name == "OpenRouter":
+            providers[1].validate_model(model, False)
     progress(1, "Writing memo" if first_stage else "Transcribing audio")
     stamp = time.strftime("%y%m%d-%H%M%S") + "-%03d" % (time.time_ns() // 1000000 % 1000)
     folder = Path(core.OUTPUT_FOLDER)
@@ -56,6 +80,14 @@ def run_pipeline(core, path, selections, settings, prompts, method, emit, transc
         try:
             if index == 0:
                 text, usage = provider.transcribe(model, path, prompts[0], method)
+                if specialist and language:
+                    emit("status", "Applying transcript language...")
+                    emit("log", "The writing model applies the selected language to the specialist transcript.")
+                    raw_target = folder / (stamp + "-source-transcript.txt")
+                    raw_target.write_text(text, encoding="utf-8")
+                    text, language_usage = providers[1].generate(selections[1][1], text,
+                        prompts[0] + "\nConvert the supplied transcript to the selected language. Preserve all content, speaker identities, and timestamps. Do not summarize or invent content.")
+                    usage = {"transcription": usage, "language": language_usage}
             else:
                 text, usage = provider.generate(model, transcript, prompts[1])
         except TruncatedOutput as exc:
@@ -105,6 +137,7 @@ def cli(core):
     mode.add_argument("--transcript", metavar="FILE", help="write a memo from an existing UTF-8 transcript file instead of audio")
     parser.add_argument("--method", choices=["auto", "inline", "upload"], default="inline", help="how Gemini receives audio: inline in the request, upload through the Files API, or auto (upload at 20 MB and above) (default: %(default)s)")
     parser.add_argument("--profile", choices=list(core.AVAILABLE_LANGUAGES), default=core.DEFAULT_LANGUAGE, help="prompt profile from transcription-prompt-*.md (default: %(default)s)")
+    parser.add_argument("--language", choices=OUTPUT_LANGUAGES, default="en", help="output language: et (Estonian), en (English) (default: %(default)s)")
     transcription_prompt = parser.add_mutually_exclusive_group()
     transcription_prompt.add_argument("--transcription-prompt", "--prompt", metavar="TEXT", help="replace the profile's transcription prompt; dedicated speech-to-text models ignore it")
     transcription_prompt.add_argument("--transcription-prompt-file", metavar="FILE", help="read the transcription prompt from a UTF-8 file")
@@ -115,7 +148,7 @@ def cli(core):
     parser.add_argument("--audio-mode", choices=["chat", "transcriptions"], default="chat", help="Custom API audio endpoint: chat messages or multipart /audio/transcriptions (default: %(default)s)")
     parser.add_argument("--list-models", action="store_true", help="list the transcription models of --provider and the writing models of --writing-provider, then exit")
     args = parser.parse_args()
-    settings = {"base_url": args.base_url, "audio_mode": args.audio_mode}
+    settings = {"base_url": args.base_url, "audio_mode": args.audio_mode, "output_language": args.language}
 
     if args.list_models:
         try:
